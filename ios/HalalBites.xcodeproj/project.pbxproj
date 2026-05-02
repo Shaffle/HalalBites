@@ -18,6 +18,7 @@
 		AA000009 /* ExploreMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000009 /* ExploreMapView.swift */; };
 		AA000010 /* ItineraryGeneratorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000010 /* ItineraryGeneratorView.swift */; };
 		AA000011 /* ZabihahService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000011 /* ZabihahService.swift */; };
+		AA000012 /* LocalItineraryGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000012 /* LocalItineraryGenerator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +29,7 @@
 		AB000005 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		AB000006 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 		AB000011 /* ZabihahService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZabihahService.swift; sourceTree = "<group>"; };
+		AB000012 /* LocalItineraryGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalItineraryGenerator.swift; sourceTree = "<group>"; };
 		AB000007 /* ItineraryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItineraryListView.swift; sourceTree = "<group>"; };
 		AB000008 /* ItineraryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItineraryDetailView.swift; sourceTree = "<group>"; };
 		AB000009 /* ExploreMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreMapView.swift; sourceTree = "<group>"; };
@@ -81,6 +83,7 @@
 				AB000005 /* APIClient.swift */,
 				AB000006 /* LocationService.swift */,
 				AB000011 /* ZabihahService.swift */,
+			AB000012 /* LocalItineraryGenerator.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -191,6 +194,7 @@
 				AA000009 /* ExploreMapView.swift in Sources */,
 				AA000010 /* ItineraryGeneratorView.swift in Sources */,
 			AA000011 /* ZabihahService.swift in Sources */,
+			AA000012 /* LocalItineraryGenerator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

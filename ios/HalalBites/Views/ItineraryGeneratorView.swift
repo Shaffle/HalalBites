@@ -3,7 +3,6 @@ import SwiftUI
 struct ItineraryGeneratorView: View {
     let onGenerate: (Itinerary) -> Void
 
-    @EnvironmentObject var api: APIClient
     @Environment(\.dismiss) private var dismiss
 
     @State private var city = ""
@@ -17,8 +16,8 @@ struct ItineraryGeneratorView: View {
         NavigationStack {
             Form {
                 Section("Destination") {
-                    TextField("City (e.g. Athens)", text: $city)
-                    TextField("Country (e.g. Greece)", text: $country)
+                    TextField("City (e.g. Chandler)", text: $city)
+                    TextField("Country (e.g. United States)", text: $country)
                 }
 
                 Section("Trip Length") {
@@ -34,6 +33,17 @@ struct ItineraryGeneratorView: View {
                     .pickerStyle(.segmented)
                 }
 
+                if isLoading {
+                    Section {
+                        HStack {
+                            ProgressView()
+                            Text("Finding halal restaurants…")
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, 8)
+                        }
+                    }
+                }
+
                 if let error = errorMessage {
                     Section {
                         Text(error).foregroundStyle(.red)
@@ -47,24 +57,27 @@ struct ItineraryGeneratorView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    if isLoading {
-                        ProgressView()
-                    } else {
-                        Button("Generate") { Task { await generate() } }
-                            .disabled(city.isEmpty || country.isEmpty)
-                    }
+                    Button("Generate") { Task { await generate() } }
+                        .disabled(city.isEmpty || country.isEmpty || isLoading)
                 }
             }
         }
     }
 
     private func generate() async {
-        isLoading = true
-        errorMessage = nil
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+        }
         do {
-            let result = try await api.generateItinerary(city: city, country: country, days: durationDays, halalLevel: minHalalLevel)
+            let itinerary = try await LocalItineraryGenerator.generate(
+                city: city,
+                country: country,
+                days: durationDays,
+                minLevel: minHalalLevel
+            )
             await MainActor.run {
-                onGenerate(result)
+                onGenerate(itinerary)
                 dismiss()
             }
         } catch {
