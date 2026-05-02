@@ -1,43 +1,55 @@
 import SwiftUI
 import MapKit
+import CoreLocation
 
 struct ExploreMapView: View {
     @EnvironmentObject var location: LocationService
     @State private var restaurants: [ZabihahRestaurant] = []
     @State private var selectedID: Int?
-    @State private var position: MapCameraPosition = .userLocation(fallback: .region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 25.2048, longitude: 55.2708), // Dubai default
-            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-        )
-    ))
+    @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
+    @State private var showLocationDeniedBanner = false
+    @State private var manualCity = ""
+    @State private var showManualSearch = false
 
     private var selectedRestaurant: ZabihahRestaurant? {
         restaurants.first { $0.id == selectedID }
     }
 
+    private var locationDenied: Bool {
+        location.authorizationStatus == .denied || location.authorizationStatus == .restricted
+    }
+
     var body: some View {
-        Map(position: $position, selection: $selectedID) {
-            UserAnnotation()
-            ForEach(restaurants) { restaurant in
-                Annotation(restaurant.name, coordinate: restaurant.coordinate, anchor: .bottom) {
-                    HalalMapPin(zabiha: restaurant.zabiha)
+        ZStack {
+            Map(position: $position, selection: $selectedID) {
+                UserAnnotation()
+                ForEach(restaurants) { restaurant in
+                    Annotation(restaurant.name, coordinate: restaurant.coordinate, anchor: .bottom) {
+                        HalalMapPin(zabiha: restaurant.zabiha)
+                    }
+                    .tag(restaurant.id)
                 }
-                .tag(restaurant.id)
+            }
+            .mapControls {
+                MapUserLocationButton()
+                MapCompass()
+                MapScaleView()
+            }
+
+            // Overlays
+            VStack {
+                MapLegend()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+
+                if locationDenied {
+                    locationDeniedBanner
+                }
+
+                Spacer()
             }
         }
-        .mapControls {
-            MapUserLocationButton()
-            MapCompass()
-            MapScaleView()
-        }
-        .overlay(alignment: .topLeading) {
-            MapLegend()
-                .padding(12)
-        }
         .onAppear {
-            location.requestPermission()
-            // If location is already known (permission granted previously), use it now
             if let loc = location.currentLocation {
                 centreAndLoad(coordinate: loc.coordinate)
             }
@@ -47,17 +59,103 @@ struct ExploreMapView: View {
             centreAndLoad(coordinate: loc.coordinate)
         }
         .onChange(of: location.authorizationStatus) { _, status in
-            // Triggered the first time the user grants permission in this session
-            if (status == .authorizedWhenInUse || status == .authorizedAlways),
-               let loc = location.currentLocation {
-                centreAndLoad(coordinate: loc.coordinate)
+            switch status {
+            case .authorizedWhenInUse, .authorizedAlways:
+                if let loc = location.currentLocation {
+                    centreAndLoad(coordinate: loc.coordinate)
+                }
+            case .denied, .restricted:
+                showLocationDeniedBanner = true
+            default:
+                break
             }
+        }
+        .sheet(isPresented: $showManualSearch) {
+            manualCitySheet
         }
         .sheet(item: Binding(
             get: { selectedRestaurant },
             set: { _ in selectedID = nil }
         )) { restaurant in
             ZabihahRestaurantSheet(restaurant: restaurant)
+                .presentationDetents([.medium])
+        }
+    }
+
+    // MARK: - Location Denied Banner
+
+    private var locationDeniedBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "location.slash.fill")
+                .foregroundStyle(.orange)
+            Text("Location access denied.")
+                .font(.caption.bold())
+            Spacer()
+            Button("Search by city") {
+                showManualSearch = true
+            }
+            .font(.caption.bold())
+            .foregroundStyle(.teal)
+        }
+        .padding(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 12)
+    }
+
+    // MARK: - Manual City Search Sheet
+
+    private var manualCitySheet: some View {
+        NavigationStack {
+            Form {
+                Section("Enter a city to find halal restaurants") {
+                    TextField("e.g. Chandler AZ", text: $manualCity)
+                }
+            }
+            .navigationTitle("Search by City")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Search") {
+                        showManualSearch = false
+                        Task { await loadByCity(manualCity) }
+                    }
+                    .disabled(manualCity.isEmpty)
+                }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showManualSearch = false }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    // MARK: - Helpers
+
+    private func centreAndLoad(coordinate: CLLocationCoordinate2D) {
+        position = .region(MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+        ))
+        Task { await loadNearby(coordinate: coordinate) }
+    }
+
+    private func loadNearby(coordinate: CLLocationCoordinate2D) async {
+        let results = (try? await ZabihahService.shared.fetchNearby(
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude
+        )) ?? ZabihahService.mockRestaurants(near: coordinate.latitude, longitude: coordinate.longitude)
+        await MainActor.run { restaurants = results }
+    }
+
+    private func loadByCity(_ cityString: String) async {
+        guard let coordinate = try? await CLGeocoder()
+            .geocodeAddressString(cityString)
+            .first?.location?.coordinate else { return }
+        await MainActor.run {
+            centreAndLoad(coordinate: coordinate)
+        }
+    }
+}
                 .presentationDetents([.medium])
         }
     }
