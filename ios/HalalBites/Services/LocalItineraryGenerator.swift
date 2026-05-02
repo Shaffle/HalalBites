@@ -79,9 +79,9 @@ enum GeneratorError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .cityNotFound(let city):
-            return "Couldn't find "\(city)". Check the city name and try again."
+            return "Couldn't find \"\(city)\". Check the city name and try again."
         case .noRestaurantsFound(let city):
-            return "No halal restaurants found near \(city). Try lowering the halal standard."
+            return "No halal restaurants found near \(city). Try updating the halal filter."
         }
     }
 }
