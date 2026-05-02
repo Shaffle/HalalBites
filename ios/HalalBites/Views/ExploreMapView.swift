@@ -35,20 +35,22 @@ struct ExploreMapView: View {
             MapLegend()
                 .padding(12)
         }
-        .onAppear { location.requestPermission() }
+        .onAppear {
+            location.requestPermission()
+            // If location is already known (permission granted previously), use it now
+            if let loc = location.currentLocation {
+                centreAndLoad(coordinate: loc.coordinate)
+            }
+        }
         .onChange(of: location.currentLocation) { _, newLocation in
             guard let loc = newLocation else { return }
-            position = .region(MKCoordinateRegion(
-                center: loc.coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-            ))
-            Task { await loadNearby(coordinate: loc.coordinate) }
+            centreAndLoad(coordinate: loc.coordinate)
         }
-        .task {
-            // Load mock data immediately so simulator shows pins on launch
-            if restaurants.isEmpty {
-                let center = CLLocationCoordinate2D(latitude: 25.2048, longitude: 55.2708)
-                restaurants = ZabihahService.mockRestaurants(near: center.latitude, longitude: center.longitude)
+        .onChange(of: location.authorizationStatus) { _, status in
+            // Triggered the first time the user grants permission in this session
+            if (status == .authorizedWhenInUse || status == .authorizedAlways),
+               let loc = location.currentLocation {
+                centreAndLoad(coordinate: loc.coordinate)
             }
         }
         .sheet(item: Binding(
@@ -58,6 +60,14 @@ struct ExploreMapView: View {
             ZabihahRestaurantSheet(restaurant: restaurant)
                 .presentationDetents([.medium])
         }
+    }
+
+    private func centreAndLoad(coordinate: CLLocationCoordinate2D) {
+        position = .region(MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+        ))
+        Task { await loadNearby(coordinate: coordinate) }
     }
 
     private func loadNearby(coordinate: CLLocationCoordinate2D) async {
