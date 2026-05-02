@@ -6,7 +6,12 @@ struct ExploreMapView: View {
     @EnvironmentObject var location: LocationService
     @State private var restaurants: [ZabihahRestaurant] = []
     @State private var selectedID: Int?
-    @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
+    @State private var position: MapCameraPosition = .userLocation(fallback: .region(
+        MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 33.3062, longitude: -111.8413),
+            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+        )
+    ))
     @State private var showLocationDeniedBanner = false
     @State private var manualCity = ""
     @State private var showManualSearch = false
@@ -68,6 +73,12 @@ struct ExploreMapView: View {
                 showLocationDeniedBanner = true
             default:
                 break
+            }
+        }
+        .task {
+            if restaurants.isEmpty {
+                let center = CLLocationCoordinate2D(latitude: 33.3062, longitude: -111.8413)
+                restaurants = ZabihahService.mockRestaurants(near: center.latitude, longitude: center.longitude)
             }
         }
         .sheet(isPresented: $showManualSearch) {
@@ -156,26 +167,6 @@ struct ExploreMapView: View {
         }
     }
 }
-                .presentationDetents([.medium])
-        }
-    }
-
-    private func centreAndLoad(coordinate: CLLocationCoordinate2D) {
-        position = .region(MKCoordinateRegion(
-            center: coordinate,
-            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-        ))
-        Task { await loadNearby(coordinate: coordinate) }
-    }
-
-    private func loadNearby(coordinate: CLLocationCoordinate2D) async {
-        let results = (try? await ZabihahService.shared.fetchNearby(
-            latitude: coordinate.latitude,
-            longitude: coordinate.longitude
-        )) ?? ZabihahService.mockRestaurants(near: coordinate.latitude, longitude: coordinate.longitude)
-        await MainActor.run { restaurants = results }
-    }
-}
 
 // MARK: - Halal Map Pin
 
@@ -184,7 +175,6 @@ struct HalalMapPin: View {
 
     var body: some View {
         ZStack {
-            // Drop shadow base
             Circle()
                 .fill(zabiha ? Color.green : Color.teal)
                 .frame(width: 36, height: 36)
@@ -201,7 +191,6 @@ struct HalalMapPin: View {
                 }
             }
         }
-        // Pin tail
         .overlay(alignment: .bottom) {
             Triangle()
                 .fill(zabiha ? Color.green : Color.teal)
