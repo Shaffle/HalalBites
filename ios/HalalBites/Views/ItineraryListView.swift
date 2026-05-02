@@ -54,14 +54,16 @@ struct ItineraryListView: View {
             .sheet(isPresented: $showingGenerator) {
                 ItineraryGeneratorView(onGenerate: handleGenerated)
             }
-            .fullScreenCover(item: $presentedItinerary) { itinerary in
-                NavigationStack {
-                    ItineraryDetailView(itinerary: itinerary)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Done") { presentedItinerary = nil }
+            .fullScreenCover(item: $presentedItinerary) { presented in
+                if let idx = itineraries.firstIndex(where: { $0.id == presented.id }) {
+                    NavigationStack {
+                        ItineraryDetailView(itinerary: $itineraries[idx])
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("Done") { presentedItinerary = nil }
+                                }
                             }
-                        }
+                    }
                 }
             }
             .onAppear { archiveEndedTrips() }

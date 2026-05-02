@@ -120,7 +120,7 @@ struct RecentDetailWrapperView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ItineraryDetailView(itinerary: itinerary)
+            ItineraryDetailView(itinerary: .constant(itinerary))
 
             if showRestore {
                 Button(action: onRestore) {

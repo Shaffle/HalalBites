@@ -3,17 +3,46 @@ import MapKit
 import CoreLocation
 
 struct ItineraryDetailView: View {
-    let itinerary: Itinerary
+    @Binding var itinerary: Itinerary
     @State private var selectedStop: ItineraryStop?
+    @State private var swapTarget: SwapTarget?
+
+    private var currentTripDay: Int {
+        let cal = Calendar.current
+        let days = cal.dateComponents([.day], from: cal.startOfDay(for: itinerary.startDate), to: cal.startOfDay(for: Date())).day ?? 0
+        return days + 1
+    }
+
+    private func canSwap(dayNumber: Int) -> Bool {
+        currentTripDay >= 2 && dayNumber >= currentTripDay
+    }
+
+    private var previousDayStops: [(dayNumber: Int, stop: ItineraryStop)] {
+        itinerary.days
+            .filter { $0.dayNumber < currentTripDay }
+            .flatMap { day in
+                day.stops.map { (dayNumber: day.dayNumber, stop: $0) }
+            }
+    }
 
     var body: some View {
         List {
-            ForEach(itinerary.days) { day in
+            ForEach(Array(itinerary.days.enumerated()), id: \.element.id) { dayIdx, day in
                 Section("Day \(day.dayNumber)") {
-                    ForEach(day.stops) { stop in
+                    ForEach(Array(day.stops.enumerated()), id: \.element.id) { stopIdx, stop in
                         ItineraryStopRow(stop: stop)
                             .contentShape(Rectangle())
                             .onTapGesture { selectedStop = stop }
+                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                if canSwap(dayNumber: day.dayNumber) {
+                                    Button {
+                                        swapTarget = SwapTarget(dayIndex: dayIdx, stopIndex: stopIdx)
+                                    } label: {
+                                        Label("Swap", systemImage: "arrow.triangle.2.circlepath")
+                                    }
+                                    .tint(.teal)
+                                }
+                            }
                     }
                 }
             }
@@ -24,6 +53,87 @@ struct ItineraryDetailView: View {
         .sheet(item: $selectedStop) { stop in
             StopDetailSheet(stop: stop)
                 .presentationDetents([.large])
+        }
+        .sheet(item: $swapTarget) { target in
+            SwapRestaurantSheet(
+                previousDayStops: previousDayStops,
+                onSelect: { restaurant in
+                    let old = itinerary.days[target.dayIndex].stops[target.stopIndex]
+                    itinerary.days[target.dayIndex].stops[target.stopIndex] = ItineraryStop(
+                        id: UUID(),
+                        restaurant: restaurant,
+                        mealType: old.mealType,
+                        notes: nil
+                    )
+                    swapTarget = nil
+                }
+            )
+        }
+    }
+}
+
+// MARK: - Swap Types
+
+private struct SwapTarget: Identifiable {
+    let id = UUID()
+    let dayIndex: Int
+    let stopIndex: Int
+}
+
+struct SwapRestaurantSheet: View {
+    let previousDayStops: [(dayNumber: Int, stop: ItineraryStop)]
+    let onSelect: (Restaurant) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if previousDayStops.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.secondary)
+                        Text("No previous restaurants")
+                            .font(.title3.bold())
+                        Text("Complete a day first to swap restaurants.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    List {
+                        ForEach(previousDayStops, id: \.stop.id) { item in
+                            Button {
+                                onSelect(item.stop.restaurant)
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(item.stop.restaurant.name)
+                                            .font(.headline)
+                                        Text("Day \(item.dayNumber) · \(item.stop.mealType.rawValue.capitalized)")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                        Text(item.stop.restaurant.cuisineType)
+                                            .font(.caption)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .foregroundStyle(.teal)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                }
+            }
+            .navigationTitle("Swap Restaurant")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
         }
     }
 }
