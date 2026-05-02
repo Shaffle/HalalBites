@@ -12,7 +12,7 @@ struct SplashScreenView: View {
 
     var body: some View {
         if isActive {
-            ItineraryListView()
+            ContentView()
         } else {
             ZStack {
                 Color.white.ignoresSafeArea()

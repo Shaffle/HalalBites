@@ -111,6 +111,7 @@ enum LocalItineraryGenerator {
             country: country,
             durationDays: days,
             createdAt: Date(),
+            startDate: startDate,
             days: itineraryDays,
             isSaved: false
         )

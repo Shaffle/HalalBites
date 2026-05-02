@@ -6,8 +6,17 @@ struct Itinerary: Identifiable, Codable {
     let country: String
     let durationDays: Int
     let createdAt: Date
+    let startDate: Date
     var days: [ItineraryDay]
     var isSaved: Bool
+
+    var endDate: Date {
+        Calendar.current.date(byAdding: .day, value: durationDays, to: startDate) ?? startDate
+    }
+
+    var hasEnded: Bool {
+        endDate < Date()
+    }
 }
 
 struct ItineraryDay: Identifiable, Codable {

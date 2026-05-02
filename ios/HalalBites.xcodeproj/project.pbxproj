@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		302117102FA5F69600D9E517 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3021170F2FA5F69600D9E517 /* ContentView.swift */; };
+		302117122FA5F69700D9E517 /* FavouritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 302117112FA5F69700D9E517 /* FavouritesView.swift */; };
+		302117142FA5F69800D9E517 /* RecentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 302117132FA5F69800D9E517 /* RecentView.swift */; };
+		302117162FA5F69800D9E517 /* ProfileEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 302117152FA5F69800D9E517 /* ProfileEditorView.swift */; };
 		3021692E2FA5C48A009731F9 /* UserReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3021692D2FA5C48A009731F9 /* UserReview.swift */; };
 		302169302FA5C4B3009731F9 /* YelpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3021692F2FA5C4B3009731F9 /* YelpService.swift */; };
 		30FDCD922FA5DA04001CD543 /* SplashScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */; };
@@ -27,6 +31,10 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		3021170F2FA5F69600D9E517 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		302117112FA5F69700D9E517 /* FavouritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavouritesView.swift; sourceTree = "<group>"; };
+		302117132FA5F69800D9E517 /* RecentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentView.swift; sourceTree = "<group>"; };
+		302117152FA5F69800D9E517 /* ProfileEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileEditorView.swift; sourceTree = "<group>"; };
 		3021692D2FA5C48A009731F9 /* UserReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserReview.swift; sourceTree = "<group>"; };
 		3021692F2FA5C4B3009731F9 /* YelpService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YelpService.swift; sourceTree = "<group>"; };
 		30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreenView.swift; sourceTree = "<group>"; };
@@ -82,6 +90,7 @@
 			isa = PBXGroup;
 			children = (
 				AB000001 /* HalalBitesApp.swift */,
+				3021170F2FA5F69600D9E517 /* ContentView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -118,6 +127,9 @@
 				30FDCD952FA5E475001CD543 /* SideMenuView.swift */,
 				30FDCD972FA5E47C001CD543 /* ArchiveView.swift */,
 				30FDCD992FA5E486001CD543 /* SettingsView.swift */,
+				302117112FA5F69700D9E517 /* FavouritesView.swift */,
+				302117132FA5F69800D9E517 /* RecentView.swift */,
+				302117152FA5F69800D9E517 /* ProfileEditorView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -199,6 +211,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				302117142FA5F69800D9E517 /* RecentView.swift in Sources */,
 				AA000001 /* HalalBitesApp.swift in Sources */,
 				302169302FA5C4B3009731F9 /* YelpService.swift in Sources */,
 				30FDCD962FA5E475001CD543 /* SideMenuView.swift in Sources */,
@@ -206,9 +219,12 @@
 				30FDCD922FA5DA04001CD543 /* SplashScreenView.swift in Sources */,
 				AA000003 /* Restaurant.swift in Sources */,
 				AA000004 /* Itinerary.swift in Sources */,
+				302117102FA5F69600D9E517 /* ContentView.swift in Sources */,
 				AA000006 /* LocationService.swift in Sources */,
 				AA000007 /* ItineraryListView.swift in Sources */,
+				302117122FA5F69700D9E517 /* FavouritesView.swift in Sources */,
 				AA000008 /* ItineraryDetailView.swift in Sources */,
+				302117162FA5F69800D9E517 /* ProfileEditorView.swift in Sources */,
 				AA000009 /* ExploreMapView.swift in Sources */,
 				3021692E2FA5C48A009731F9 /* UserReview.swift in Sources */,
 				AA000010 /* ItineraryGeneratorView.swift in Sources */,
