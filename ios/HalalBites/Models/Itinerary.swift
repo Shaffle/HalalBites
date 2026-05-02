@@ -16,11 +16,24 @@ struct ItineraryDay: Identifiable, Codable {
     var stops: [ItineraryStop]
 }
 
+struct TravelInfo: Codable {
+    let distanceMeters: Double
+    let walkingTimeMinutes: Int
+    let drivingTimeMinutes: Int
+
+    var formattedDistance: String {
+        let miles = distanceMeters / 1609.34
+        if miles < 0.1 {
+            return String(format: "%.0f ft", distanceMeters * 3.28084)
+        }
+        return String(format: "%.1f mi", miles)
+    }
+}
+
 struct ItineraryStop: Identifiable, Codable {
     let id: UUID
     let restaurant: Restaurant
     let mealType: MealType
-    let walkingTimeFromPrevious: Int?  // minutes
     let notes: String?
 }
 

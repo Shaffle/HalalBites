@@ -1,36 +1,112 @@
 import SwiftUI
+import CoreLocation
 
 struct ItineraryGeneratorView: View {
     let onGenerate: (Itinerary) -> Void
 
+    @EnvironmentObject var location: LocationService
     @Environment(\.dismiss) private var dismiss
 
     @State private var city = ""
     @State private var country = ""
     @State private var durationDays = 3
-    @State private var minHalalLevel: HalalLevel = .level2
+    @State private var selectedPreferences: Set<HalalLevel> = [.halal]
+    @State private var selectedCuisines: Set<CuisineCategory> = []
+    @State private var budgetLevel: BudgetLevel = .moderate
+    @State private var travelDate = Date()
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var didAutoFill = false
+    @State private var useCurrentLocation = true
+
+    private static let countries = [
+        "United States", "United Kingdom", "Canada", "Australia",
+        "United Arab Emirates", "Saudi Arabia", "Qatar", "Kuwait", "Bahrain", "Oman",
+        "Turkey", "Malaysia", "Indonesia", "Singapore", "Pakistan", "India", "Bangladesh",
+        "Egypt", "Jordan", "Lebanon", "Morocco", "Tunisia", "Algeria",
+        "France", "Germany", "Netherlands", "Belgium", "Sweden", "Norway",
+        "South Africa", "Nigeria", "Kenya",
+        "Japan", "South Korea", "Thailand", "Philippines",
+        "Brazil", "Argentina", "Mexico", "New Zealand"
+    ]
 
     var body: some View {
         NavigationStack {
             Form {
+                Section("Travel Date") {
+                    DatePicker("Start Date", selection: $travelDate, in: Date()..., displayedComponents: .date)
+                }
+
                 Section("Destination") {
-                    TextField("City (e.g. Chandler)", text: $city)
-                    TextField("Country (e.g. United States)", text: $country)
+                    Toggle("Use my current location", isOn: $useCurrentLocation)
+
+                    if !useCurrentLocation {
+                        TextField("City (e.g. Istanbul)", text: $city)
+                        Picker("Country", selection: $country) {
+                            Text("Select a country").tag("")
+                            ForEach(Self.countries, id: \.self) { name in
+                                Text(name).tag(name)
+                            }
+                        }
+                    } else if didAutoFill {
+                        HStack {
+                            Image(systemName: "location.fill")
+                                .foregroundStyle(.teal)
+                            Text("\(city), \(country)")
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        HStack {
+                            ProgressView()
+                            Text("Detecting location…")
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, 8)
+                        }
+                    }
+                }
+
+                Section("Budget") {
+                    Picker("Budget", selection: $budgetLevel) {
+                        ForEach(BudgetLevel.allCases) { level in
+                            Text(level.symbol).tag(level)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
 
                 Section("Trip Length") {
                     Stepper("\(durationDays) day\(durationDays == 1 ? "" : "s")", value: $durationDays, in: 1...14)
                 }
 
-                Section("Halal Standard") {
-                    Picker("Minimum Level", selection: $minHalalLevel) {
-                        ForEach([HalalLevel.level1, .level2, .level3], id: \.self) { level in
-                            Text(level.description).tag(level)
+                Section("Dietary Preferences") {
+                    ForEach(HalalLevel.allCases, id: \.self) { level in
+                        Toggle(level.description, isOn: Binding(
+                            get: { selectedPreferences.contains(level) },
+                            set: { isOn in
+                                if isOn {
+                                    selectedPreferences.insert(level)
+                                } else if selectedPreferences.count > 1 {
+                                    selectedPreferences.remove(level)
+                                }
+                            }
+                        ))
+                    }
+                }
+
+                Section {
+                    NavigationLink {
+                        CuisinePickerView(selected: $selectedCuisines)
+                    } label: {
+                        HStack {
+                            Text("Cuisine")
+                            Spacer()
+                            Text(selectedCuisines.isEmpty ? "Any" : selectedCuisines.map(\.rawValue).sorted().joined(separator: ", "))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
                     }
-                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Cuisine Preferences")
                 }
 
                 if isLoading {
@@ -58,9 +134,43 @@ struct ItineraryGeneratorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Generate") { Task { await generate() } }
-                        .disabled(city.isEmpty || country.isEmpty || isLoading)
+                        .disabled(!canGenerate || isLoading)
                 }
             }
+            .task {
+                await autoFillFromLocation()
+            }
+            .onChange(of: location.currentLocation) { _, _ in
+                if !didAutoFill && useCurrentLocation {
+                    Task { await autoFillFromLocation() }
+                }
+            }
+            .onChange(of: useCurrentLocation) { _, useCurrent in
+                if useCurrent && !didAutoFill {
+                    Task { await autoFillFromLocation() }
+                }
+                if !useCurrent {
+                    city = ""
+                    country = ""
+                }
+            }
+        }
+    }
+
+    private var canGenerate: Bool {
+        !city.isEmpty && !country.isEmpty
+    }
+
+    private func autoFillFromLocation() async {
+        guard useCurrentLocation, let loc = location.currentLocation else { return }
+
+        let geocoder = CLGeocoder()
+        guard let placemark = try? await geocoder.reverseGeocodeLocation(loc).first else { return }
+
+        await MainActor.run {
+            city = placemark.locality ?? placemark.administrativeArea ?? ""
+            country = placemark.country ?? ""
+            didAutoFill = true
         }
     }
 
@@ -74,7 +184,10 @@ struct ItineraryGeneratorView: View {
                 city: city,
                 country: country,
                 days: durationDays,
-                minLevel: minHalalLevel
+                preferences: selectedPreferences,
+                cuisines: selectedCuisines,
+                budget: budgetLevel,
+                startDate: travelDate
             )
             await MainActor.run {
                 onGenerate(itinerary)
@@ -86,5 +199,36 @@ struct ItineraryGeneratorView: View {
                 isLoading = false
             }
         }
+    }
+}
+
+struct CuisinePickerView: View {
+    @Binding var selected: Set<CuisineCategory>
+
+    var body: some View {
+        List {
+            ForEach(CuisineCategory.allCases) { cuisine in
+                Button {
+                    if selected.contains(cuisine) {
+                        selected.remove(cuisine)
+                    } else {
+                        selected.insert(cuisine)
+                    }
+                } label: {
+                    HStack {
+                        Text(cuisine.rawValue)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if selected.contains(cuisine) {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.teal)
+                                .bold()
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Cuisine")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

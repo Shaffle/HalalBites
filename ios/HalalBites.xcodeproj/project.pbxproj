@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3021692E2FA5C48A009731F9 /* UserReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3021692D2FA5C48A009731F9 /* UserReview.swift */; };
+		302169302FA5C4B3009731F9 /* YelpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3021692F2FA5C4B3009731F9 /* YelpService.swift */; };
+		30FDCD922FA5DA04001CD543 /* SplashScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */; };
+		30FDCD942FA5DAC6001CD543 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 30FDCD932FA5DAC6001CD543 /* Assets.xcassets */; };
+		30FDCD962FA5E475001CD543 /* SideMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD952FA5E475001CD543 /* SideMenuView.swift */; };
+		30FDCD982FA5E47C001CD543 /* ArchiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD972FA5E47C001CD543 /* ArchiveView.swift */; };
+		30FDCD9A2FA5E486001CD543 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD992FA5E486001CD543 /* SettingsView.swift */; };
 		AA000001 /* HalalBitesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000001 /* HalalBitesApp.swift */; };
 		AA000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000002 /* ContentView.swift */; };
 		AA000003 /* Restaurant.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000003 /* Restaurant.swift */; };
@@ -22,18 +29,25 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		3021692D2FA5C48A009731F9 /* UserReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserReview.swift; sourceTree = "<group>"; };
+		3021692F2FA5C4B3009731F9 /* YelpService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YelpService.swift; sourceTree = "<group>"; };
+		30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreenView.swift; sourceTree = "<group>"; };
+		30FDCD932FA5DAC6001CD543 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		30FDCD952FA5E475001CD543 /* SideMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideMenuView.swift; sourceTree = "<group>"; };
+		30FDCD972FA5E47C001CD543 /* ArchiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveView.swift; sourceTree = "<group>"; };
+		30FDCD992FA5E486001CD543 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		AB000001 /* HalalBitesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HalalBitesApp.swift; sourceTree = "<group>"; };
 		AB000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AB000003 /* Restaurant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Restaurant.swift; sourceTree = "<group>"; };
 		AB000004 /* Itinerary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Itinerary.swift; sourceTree = "<group>"; };
 		AB000005 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		AB000006 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
-		AB000011 /* ZabihahService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZabihahService.swift; sourceTree = "<group>"; };
-		AB000012 /* LocalItineraryGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalItineraryGenerator.swift; sourceTree = "<group>"; };
 		AB000007 /* ItineraryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItineraryListView.swift; sourceTree = "<group>"; };
 		AB000008 /* ItineraryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItineraryDetailView.swift; sourceTree = "<group>"; };
 		AB000009 /* ExploreMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreMapView.swift; sourceTree = "<group>"; };
 		AB000010 /* ItineraryGeneratorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItineraryGeneratorView.swift; sourceTree = "<group>"; };
+		AB000011 /* ZabihahService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZabihahService.swift; sourceTree = "<group>"; };
+		AB000012 /* LocalItineraryGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalItineraryGenerator.swift; sourceTree = "<group>"; };
 		AC000001 /* HalalBites.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HalalBites.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -48,9 +62,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		AE000000 = {
+			isa = PBXGroup;
+			children = (
+				AE000001 /* HalalBites */,
+				AE000006 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
 		AE000001 /* HalalBites */ = {
 			isa = PBXGroup;
 			children = (
+				30FDCD932FA5DAC6001CD543 /* Assets.xcassets */,
 				AE000002 /* App */,
 				AE000003 /* Models */,
 				AE000004 /* Services */,
@@ -71,6 +94,7 @@
 		AE000003 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				3021692D2FA5C48A009731F9 /* UserReview.swift */,
 				AB000003 /* Restaurant.swift */,
 				AB000004 /* Itinerary.swift */,
 			);
@@ -80,10 +104,11 @@
 		AE000004 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				3021692F2FA5C4B3009731F9 /* YelpService.swift */,
 				AB000005 /* APIClient.swift */,
 				AB000006 /* LocationService.swift */,
 				AB000011 /* ZabihahService.swift */,
-			AB000012 /* LocalItineraryGenerator.swift */,
+				AB000012 /* LocalItineraryGenerator.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -95,6 +120,10 @@
 				AB000008 /* ItineraryDetailView.swift */,
 				AB000009 /* ExploreMapView.swift */,
 				AB000010 /* ItineraryGeneratorView.swift */,
+				30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */,
+				30FDCD952FA5E475001CD543 /* SideMenuView.swift */,
+				30FDCD972FA5E47C001CD543 /* ArchiveView.swift */,
+				30FDCD992FA5E486001CD543 /* SettingsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -105,14 +134,6 @@
 				AC000001 /* HalalBites.app */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		AE000000 /* root */ = {
-			isa = PBXGroup;
-			children = (
-				AE000001 /* HalalBites */,
-				AE000006 /* Products */,
-			);
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -173,6 +194,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				30FDCD942FA5DAC6001CD543 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -184,6 +206,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA000001 /* HalalBitesApp.swift in Sources */,
+				302169302FA5C4B3009731F9 /* YelpService.swift in Sources */,
+				30FDCD962FA5E475001CD543 /* SideMenuView.swift in Sources */,
+				30FDCD9A2FA5E486001CD543 /* SettingsView.swift in Sources */,
+				30FDCD922FA5DA04001CD543 /* SplashScreenView.swift in Sources */,
 				AA000002 /* ContentView.swift in Sources */,
 				AA000003 /* Restaurant.swift in Sources */,
 				AA000004 /* Itinerary.swift in Sources */,
@@ -192,9 +218,11 @@
 				AA000007 /* ItineraryListView.swift in Sources */,
 				AA000008 /* ItineraryDetailView.swift in Sources */,
 				AA000009 /* ExploreMapView.swift in Sources */,
+				3021692E2FA5C48A009731F9 /* UserReview.swift in Sources */,
 				AA000010 /* ItineraryGeneratorView.swift in Sources */,
-			AA000011 /* ZabihahService.swift in Sources */,
-			AA000012 /* LocalItineraryGenerator.swift in Sources */,
+				AA000011 /* ZabihahService.swift in Sources */,
+				AA000012 /* LocalItineraryGenerator.swift in Sources */,
+				30FDCD982FA5E47C001CD543 /* ArchiveView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -395,7 +423,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
 	};
 	rootObject = AG000001 /* Project object */;
 }

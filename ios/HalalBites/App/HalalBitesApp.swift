@@ -6,11 +6,10 @@ struct HalalBitesApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            SplashScreenView()
                 .environmentObject(locationService)
                 .environmentObject(APIClient())
                 .onAppear {
-                    // Request on launch so permission dialog fires immediately
                     locationService.requestPermission()
                 }
         }

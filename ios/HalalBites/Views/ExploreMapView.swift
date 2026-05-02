@@ -5,7 +5,7 @@ import CoreLocation
 struct ExploreMapView: View {
     @EnvironmentObject var location: LocationService
     @State private var restaurants: [ZabihahRestaurant] = []
-    @State private var selectedID: Int?
+    @State private var selectedID: String?
     @State private var position: MapCameraPosition = .userLocation(fallback: .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 33.3062, longitude: -111.8413),
