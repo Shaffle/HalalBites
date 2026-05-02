@@ -6,17 +6,21 @@ struct ExploreMapView: View {
     @EnvironmentObject var api: APIClient
     @State private var restaurants: [Restaurant] = []
     @State private var selectedRestaurant: Restaurant?
+    @State private var selectedID: UUID?
     @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
 
     var body: some View {
-        Map(position: $position, selection: $selectedRestaurant) {
+        Map(position: $position, selection: $selectedID) {
             UserAnnotation()
             ForEach(restaurants) { restaurant in
                 Annotation(restaurant.name, coordinate: restaurant.coordinate, anchor: .bottom) {
                     RestaurantMapPin(restaurant: restaurant)
-                        .onTapGesture { selectedRestaurant = restaurant }
                 }
+                .tag(restaurant.id)
             }
+        }
+        .onChange(of: selectedID) { _, id in
+            selectedRestaurant = restaurants.first { $0.id == id }
         }
         .mapControls {
             MapUserLocationButton()

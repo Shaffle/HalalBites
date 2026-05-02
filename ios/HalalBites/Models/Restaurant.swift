@@ -1,7 +1,7 @@
 import Foundation
 import CoreLocation
 
-struct Restaurant: Identifiable, Codable {
+struct Restaurant: Identifiable, Codable, Hashable {
     let id: UUID
     let name: String
     let address: String
@@ -19,7 +19,7 @@ struct Restaurant: Identifiable, Codable {
     }
 }
 
-enum HalalLevel: Int, Codable, CustomStringConvertible {
+enum HalalLevel: Int, Codable, Hashable, CustomStringConvertible {
     case level1 = 1   // Self-certified
     case level2 = 2   // Third-party certified
     case level3 = 3   // Zabiha + third-party certified
