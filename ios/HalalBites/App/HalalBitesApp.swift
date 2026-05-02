@@ -8,7 +8,6 @@ struct HalalBitesApp: App {
         WindowGroup {
             SplashScreenView()
                 .environmentObject(locationService)
-                .environmentObject(APIClient())
                 .onAppear {
                     locationService.requestPermission()
                 }

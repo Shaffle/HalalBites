@@ -2,18 +2,11 @@ import SwiftUI
 
 struct SideMenuView: View {
     @Binding var isShowing: Bool
-    @Binding var itineraries: [Itinerary]
     @Binding var archivedItineraries: [Itinerary]
-    @Binding var recentlyDeleted: [Itinerary]
-    @Binding var favouriteIDs: Set<UUID>
     var onRestore: (Itinerary) -> Void
 
     @State private var showArchive = false
-    @State private var showFavourites = false
-    @State private var showRecent = false
     @State private var showSettings = false
-    @State private var showProfile = false
-    @AppStorage("lightsOn") private var lightsOn = true
 
     private let menuWidth: CGFloat = 280
 
@@ -33,97 +26,29 @@ struct SideMenuView: View {
             Spacer()
         }
         .offset(x: isShowing ? 0 : -menuWidth)
-        .sheet(isPresented: $showArchive) {
-            NavigationStack {
-                ArchiveView(
-                    archivedItineraries: $archivedItineraries,
-                    favouriteIDs: $favouriteIDs,
-                    recentlyDeleted: $recentlyDeleted,
-                    onRestore: onRestore
-                )
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { showArchive = false }
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showFavourites) {
-            NavigationStack {
-                FavouritesView(
-                    itineraries: itineraries,
-                    archivedItineraries: archivedItineraries,
-                    favouriteIDs: $favouriteIDs
-                )
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { showFavourites = false }
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showRecent) {
-            NavigationStack {
-                RecentView(
-                    itineraries: itineraries,
-                    archivedItineraries: archivedItineraries,
-                    recentlyDeleted: $recentlyDeleted,
-                    onRestore: onRestore
-                )
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { showRecent = false }
-                    }
-                }
-            }
+        .navigationDestination(isPresented: $showArchive) {
+            ArchiveView(
+                archivedItineraries: $archivedItineraries,
+                onRestore: onRestore
+            )
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
         }
-        .sheet(isPresented: $showProfile) {
-            ProfileEditorView()
-        }
     }
 
-    @AppStorage("profileName") private var profileName = "My Profile"
-    @AppStorage("profileCity") private var profileCity = ""
-    @AppStorage("profileImageData") private var profileImageData: Data?
-
     private var profileHeader: some View {
-        Button {
-            closeSideMenu()
-            showProfile = true
-        } label: {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 8) {
-                    if let data = profileImageData, let uiImage = UIImage(data: data) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 56, height: 56)
-                            .clipShape(Circle())
-                    } else {
-                        Image(systemName: "person.circle.fill")
-                            .font(.system(size: 52))
-                            .foregroundStyle(.teal)
-                    }
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: "person.circle.fill")
+                .font(.system(size: 52))
+                .foregroundStyle(.teal)
 
-                    Text(profileName)
-                        .font(.title3.bold())
-                        .foregroundStyle(.primary)
+            Text("My Profile")
+                .font(.title3.bold())
 
-                    if !profileCity.isEmpty {
-                        Text(profileCity)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-                Image(systemName: "pencil.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.teal)
-                    .padding(.top, 4)
-            }
+            Text("Halal Explorer")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
         .padding(20)
         .padding(.top, 40)
@@ -132,44 +57,25 @@ struct SideMenuView: View {
     private var menuItems: some View {
         VStack(alignment: .leading, spacing: 4) {
             SideMenuRow(icon: "archivebox", title: "Archive", badge: archivedItineraries.count) {
-                closeSideMenu()
                 showArchive = true
+                closeSideMenu()
             }
 
-            SideMenuRow(icon: "heart", title: "Favourites", badge: favouriteIDs.count) {
+            SideMenuRow(icon: "heart", title: "Favourites") {
                 closeSideMenu()
-                showFavourites = true
             }
 
             SideMenuRow(icon: "clock.arrow.circlepath", title: "Recent") {
                 closeSideMenu()
-                showRecent = true
             }
         }
         .padding(.vertical, 8)
     }
 
     private var settingsButton: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            SideMenuRow(icon: "gearshape", title: "Settings") {
-                closeSideMenu()
-                showSettings = true
-            }
-            HStack(spacing: 14) {
-                Image(systemName: lightsOn ? "sun.max.fill" : "moon.fill")
-                    .font(.body)
-                    .frame(width: 24)
-                    .foregroundStyle(.teal)
-                Text("Lights")
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                Spacer()
-                Toggle("", isOn: $lightsOn)
-                    .labelsHidden()
-                    .tint(.teal)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+        SideMenuRow(icon: "gearshape", title: "Settings") {
+            showSettings = true
+            closeSideMenu()
         }
         .padding(.bottom, 30)
     }

@@ -1,71 +1,102 @@
 import SwiftUI
 
 struct ItineraryListView: View {
-    @EnvironmentObject var api: APIClient
-    @Binding var itineraries: [Itinerary]
+    @State private var itineraries: [Itinerary] = []
+    @State private var archivedItineraries: [Itinerary] = []
     @State private var showingGenerator = false
     @State private var presentedItinerary: Itinerary?
-    @Binding var showSideMenu: Bool
-    @Binding var favouriteIDs: Set<UUID>
-    @Binding var archivedItineraries: [Itinerary]
-    @Binding var recentlyDeleted: [Itinerary]
+    @State private var showSideMenu = false
+    @State private var favouriteIDs: Set<UUID> = []
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if itineraries.isEmpty {
-                    emptyState
-                } else {
-                    List {
-                        ForEach(itineraries) { itinerary in
-                            Button {
-                                presentedItinerary = itinerary
-                            } label: {
-                                ItineraryRowView(itinerary: itinerary, isFavourite: favouriteIDs.contains(itinerary.id))
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    deleteItinerary(itinerary)
+        ZStack {
+            NavigationStack {
+                Group {
+                    if itineraries.isEmpty {
+                        emptyState
+                    } else {
+                        List {
+                            ForEach(itineraries) { itinerary in
+                                Button {
+                                    presentedItinerary = itinerary
                                 } label: {
-                                    Label("Delete", systemImage: "trash")
+                                    ItineraryRowView(itinerary: itinerary, isFavourite: favouriteIDs.contains(itinerary.id))
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button(role: .destructive) {
+                                        deleteItinerary(itinerary)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                    Button {
+                                        archiveItinerary(itinerary)
+                                    } label: {
+                                        Label("Archive", systemImage: "archivebox")
+                                    }
+                                    .tint(.orange)
+                                    Button {
+                                        toggleFavourite(itinerary)
+                                    } label: {
+                                        Label(
+                                            favouriteIDs.contains(itinerary.id) ? "Unfavourite" : "Favourite",
+                                            systemImage: favouriteIDs.contains(itinerary.id) ? "heart.slash" : "heart"
+                                        )
+                                    }
+                                    .tint(.pink)
                                 }
                             }
                         }
-                    }
-                    .listStyle(.insetGrouped)
-                }
-            }
-            .navigationTitle("My Itineraries")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            showSideMenu = true
-                        }
-                    } label: {
-                        Image(systemName: "line.3.horizontal")
+                        .listStyle(.insetGrouped)
                     }
                 }
-                ToolbarItem(placement: .primaryAction) {
-                    Button(action: { showingGenerator = true }) {
-                        Label("Generate", systemImage: "sparkles")
-                    }
-                }
-            }
-            .sheet(isPresented: $showingGenerator) {
-                ItineraryGeneratorView(onGenerate: handleGenerated)
-            }
-            .fullScreenCover(item: $presentedItinerary) { itinerary in
-                NavigationStack {
-                    ItineraryDetailView(itinerary: itinerary)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Done") { presentedItinerary = nil }
+                .navigationTitle("My Itineraries")
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                showSideMenu = true
                             }
+                        } label: {
+                            Image(systemName: "line.3.horizontal")
                         }
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(action: { showingGenerator = true }) {
+                            Label("Generate", systemImage: "sparkles")
+                        }
+                    }
+                }
+                .sheet(isPresented: $showingGenerator) {
+                    ItineraryGeneratorView(onGenerate: handleGenerated)
+                }
+                .fullScreenCover(item: $presentedItinerary) { itinerary in
+                    NavigationStack {
+                        ItineraryDetailView(itinerary: itinerary)
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("Done") { presentedItinerary = nil }
+                                }
+                            }
+                    }
                 }
             }
-            .onAppear { archiveEndedTrips() }
+            .disabled(showSideMenu)
+
+            if showSideMenu {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            showSideMenu = false
+                        }
+                    }
+            }
+
+            SideMenuView(
+                isShowing: $showSideMenu,
+                archivedItineraries: $archivedItineraries,
+                onRestore: restoreItinerary
+            )
         }
     }
 
@@ -75,7 +106,7 @@ struct ItineraryListView: View {
                 .font(.system(size: 64))
                 .foregroundStyle(.secondary)
             Text("No trips planned")
-                .font(.headline)
+                .font(.title2.bold())
             HStack(spacing: 4) {
                 Text("Click the")
                 Image(systemName: "sparkles")
@@ -95,27 +126,27 @@ struct ItineraryListView: View {
     private func deleteItinerary(_ itinerary: Itinerary) {
         withAnimation {
             itineraries.removeAll { $0.id == itinerary.id }
-            favouriteIDs.remove(itinerary.id)
-            if !recentlyDeleted.contains(where: { $0.id == itinerary.id }) {
-                recentlyDeleted.insert(itinerary, at: 0)
-            }
         }
     }
 
-    func restoreItinerary(_ itinerary: Itinerary) {
+    private func archiveItinerary(_ itinerary: Itinerary) {
+        withAnimation {
+            itineraries.removeAll { $0.id == itinerary.id }
+            archivedItineraries.insert(itinerary, at: 0)
+        }
+    }
+
+    private func restoreItinerary(_ itinerary: Itinerary) {
         archivedItineraries.removeAll { $0.id == itinerary.id }
         itineraries.insert(itinerary, at: 0)
     }
 
-    private func archiveEndedTrips() {
-        let ended = itineraries.filter { $0.hasEnded }
-        guard !ended.isEmpty else { return }
+    private func toggleFavourite(_ itinerary: Itinerary) {
         withAnimation {
-            for trip in ended {
-                itineraries.removeAll { $0.id == trip.id }
-                if !archivedItineraries.contains(where: { $0.id == trip.id }) {
-                    archivedItineraries.insert(trip, at: 0)
-                }
+            if favouriteIDs.contains(itinerary.id) {
+                favouriteIDs.remove(itinerary.id)
+            } else {
+                favouriteIDs.insert(itinerary.id)
             }
         }
     }
