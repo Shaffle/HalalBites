@@ -14,6 +14,9 @@
 		30FDCD962FA5E475001CD543 /* SideMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD952FA5E475001CD543 /* SideMenuView.swift */; };
 		30FDCD982FA5E47C001CD543 /* ArchiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD972FA5E47C001CD543 /* ArchiveView.swift */; };
 		30FDCD9A2FA5E486001CD543 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD992FA5E486001CD543 /* SettingsView.swift */; };
+		30FDCD9C2FA5E7BB001CD543 /* FavouritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD9B2FA5E7BB001CD543 /* FavouritesView.swift */; };
+		30FDCD9E2FA5E7C5001CD543 /* RecentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD9D2FA5E7C5001CD543 /* RecentView.swift */; };
+		30FDCDA02FA5E9DC001CD543 /* ProfileEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD9F2FA5E9DC001CD543 /* ProfileEditorView.swift */; };
 		AA000001 /* HalalBitesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000001 /* HalalBitesApp.swift */; };
 		AA000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000002 /* ContentView.swift */; };
 		AA000003 /* Restaurant.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000003 /* Restaurant.swift */; };
@@ -36,6 +39,9 @@
 		30FDCD952FA5E475001CD543 /* SideMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideMenuView.swift; sourceTree = "<group>"; };
 		30FDCD972FA5E47C001CD543 /* ArchiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveView.swift; sourceTree = "<group>"; };
 		30FDCD992FA5E486001CD543 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		30FDCD9B2FA5E7BB001CD543 /* FavouritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavouritesView.swift; sourceTree = "<group>"; };
+		30FDCD9D2FA5E7C5001CD543 /* RecentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentView.swift; sourceTree = "<group>"; };
+		30FDCD9F2FA5E9DC001CD543 /* ProfileEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileEditorView.swift; sourceTree = "<group>"; };
 		AB000001 /* HalalBitesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HalalBitesApp.swift; sourceTree = "<group>"; };
 		AB000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AB000003 /* Restaurant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Restaurant.swift; sourceTree = "<group>"; };
@@ -124,6 +130,9 @@
 				30FDCD952FA5E475001CD543 /* SideMenuView.swift */,
 				30FDCD972FA5E47C001CD543 /* ArchiveView.swift */,
 				30FDCD992FA5E486001CD543 /* SettingsView.swift */,
+				30FDCD9B2FA5E7BB001CD543 /* FavouritesView.swift */,
+				30FDCD9D2FA5E7C5001CD543 /* RecentView.swift */,
+				30FDCD9F2FA5E9DC001CD543 /* ProfileEditorView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -208,12 +217,14 @@
 				AA000001 /* HalalBitesApp.swift in Sources */,
 				302169302FA5C4B3009731F9 /* YelpService.swift in Sources */,
 				30FDCD962FA5E475001CD543 /* SideMenuView.swift in Sources */,
+				30FDCD9E2FA5E7C5001CD543 /* RecentView.swift in Sources */,
 				30FDCD9A2FA5E486001CD543 /* SettingsView.swift in Sources */,
 				30FDCD922FA5DA04001CD543 /* SplashScreenView.swift in Sources */,
 				AA000002 /* ContentView.swift in Sources */,
 				AA000003 /* Restaurant.swift in Sources */,
 				AA000004 /* Itinerary.swift in Sources */,
 				AA000005 /* APIClient.swift in Sources */,
+				30FDCDA02FA5E9DC001CD543 /* ProfileEditorView.swift in Sources */,
 				AA000006 /* LocationService.swift in Sources */,
 				AA000007 /* ItineraryListView.swift in Sources */,
 				AA000008 /* ItineraryDetailView.swift in Sources */,
@@ -221,6 +232,7 @@
 				3021692E2FA5C48A009731F9 /* UserReview.swift in Sources */,
 				AA000010 /* ItineraryGeneratorView.swift in Sources */,
 				AA000011 /* ZabihahService.swift in Sources */,
+				30FDCD9C2FA5E7BB001CD543 /* FavouritesView.swift in Sources */,
 				AA000012 /* LocalItineraryGenerator.swift in Sources */,
 				30FDCD982FA5E47C001CD543 /* ArchiveView.swift in Sources */,
 			);
