@@ -7,6 +7,8 @@ struct ItineraryDetailView: View {
     @Binding var itinerary: Itinerary
     @State private var selectedStop: ItineraryStop?
     @State private var swapTarget: SwapTarget?
+    @State private var showDayFeedback = false
+    @State private var lastPromptedDay = 0
 
     private var currentTripDay: Int {
         let cal = Calendar.current
@@ -24,6 +26,14 @@ struct ItineraryDetailView: View {
             .flatMap { day in
                 day.stops.map { (dayNumber: day.dayNumber, stop: $0) }
             }
+    }
+
+    private var feedbackDay: ItineraryDay? {
+        itinerary.days.first { $0.dayNumber == currentTripDay - 1 }
+    }
+
+    private var hasRemainingDays: Bool {
+        itinerary.days.contains { $0.dayNumber >= currentTripDay }
     }
 
     var body: some View {
@@ -51,6 +61,13 @@ struct ItineraryDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("\(itinerary.city) · \(itinerary.durationDays)d")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            let key = "lastPromptedDay_\(itinerary.id.uuidString)"
+            lastPromptedDay = UserDefaults.standard.integer(forKey: key)
+            if currentTripDay > 1 && currentTripDay > lastPromptedDay && hasRemainingDays {
+                showDayFeedback = true
+            }
+        }
         .sheet(item: $selectedStop) { stop in
             StopDetailSheet(stop: stop)
                 .presentationDetents([.large])
@@ -69,6 +86,44 @@ struct ItineraryDetailView: View {
                     swapTarget = nil
                 }
             )
+        }
+        .sheet(isPresented: $showDayFeedback) {
+            if let day = feedbackDay {
+                DayFeedbackSheet(
+                    dayNumber: day.dayNumber,
+                    stops: day.stops,
+                    onApply: { likedStops in
+                        propagateLiked(likedStops)
+                        markPrompted()
+                    },
+                    onSkip: {
+                        markPrompted()
+                    }
+                )
+                .presentationDetents([.medium])
+            }
+        }
+    }
+
+    private func markPrompted() {
+        let key = "lastPromptedDay_\(itinerary.id.uuidString)"
+        UserDefaults.standard.set(currentTripDay, forKey: key)
+        lastPromptedDay = currentTripDay
+    }
+
+    private func propagateLiked(_ likedStops: [ItineraryStop]) {
+        for dayIdx in itinerary.days.indices {
+            guard itinerary.days[dayIdx].dayNumber >= currentTripDay else { continue }
+            for liked in likedStops {
+                if let stopIdx = itinerary.days[dayIdx].stops.firstIndex(where: { $0.mealType == liked.mealType }) {
+                    itinerary.days[dayIdx].stops[stopIdx] = ItineraryStop(
+                        id: UUID(),
+                        restaurant: liked.restaurant,
+                        mealType: liked.mealType,
+                        notes: liked.notes
+                    )
+                }
+            }
         }
     }
 }
@@ -133,6 +188,79 @@ struct SwapRestaurantSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Day Feedback Sheet
+
+struct DayFeedbackSheet: View {
+    let dayNumber: Int
+    let stops: [ItineraryStop]
+    let onApply: ([ItineraryStop]) -> Void
+    let onSkip: () -> Void
+
+    @State private var liked: Set<UUID> = []
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text("How was Day \(dayNumber)?")
+                        .font(.title3.bold())
+                    Text("Select any favourites to add them to your remaining days.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    ForEach(stops) { stop in
+                        Button {
+                            if liked.contains(stop.id) {
+                                liked.remove(stop.id)
+                            } else {
+                                liked.insert(stop.id)
+                            }
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(stop.restaurant.name)
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                    Text(stop.mealType.rawValue.capitalized)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: liked.contains(stop.id) ? "heart.fill" : "heart")
+                                    .foregroundStyle(liked.contains(stop.id) ? .red : .secondary)
+                                    .font(.title3)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Day \(dayNumber) Recap")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Skip") {
+                        onSkip()
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Apply") {
+                        let selected = stops.filter { liked.contains($0.id) }
+                        onApply(selected)
+                        dismiss()
+                    }
+                    .disabled(liked.isEmpty)
                 }
             }
         }
@@ -269,7 +397,7 @@ struct StopDetailSheet: View {
                     .foregroundStyle(.teal)
                     .clipShape(Capsule())
 
-                if let status = OpenStatusHelper.status(for: restaurant.businessHours) {
+                if let status = OpenStatusHelper.status(for: restaurant.businessHours, mealType: stop.mealType) {
                     Text(status.label)
                         .font(.caption.bold())
                         .padding(.horizontal, 10)
@@ -467,7 +595,7 @@ struct ItineraryStopRow: View {
                 Text(stop.restaurant.name)
                     .font(.headline)
                 Spacer()
-                if let status = OpenStatusHelper.status(for: stop.restaurant.businessHours) {
+                if let status = OpenStatusHelper.status(for: stop.restaurant.businessHours, mealType: stop.mealType) {
                     Text(status.label)
                         .font(.caption2.bold())
                         .padding(.horizontal, 6)
@@ -589,7 +717,7 @@ enum OpenStatus {
 }
 
 enum OpenStatusHelper {
-    static func status(for hours: [BusinessHours]) -> OpenStatus? {
+    static func status(for hours: [BusinessHours], mealType: MealType? = nil) -> OpenStatus? {
         guard !hours.isEmpty else { return nil }
         let now = Date()
         let calendar = Calendar.current
@@ -608,13 +736,18 @@ enum OpenStatusHelper {
               let openMin = parseTimeMinutes(parts[0]),
               let closeMin = parseTimeMinutes(parts[1]) else { return nil }
 
-        let hour = calendar.component(.hour, from: now)
-        let minute = calendar.component(.minute, from: now)
-        let current = hour * 60 + minute
+        let checkTime: Int
+        if let meal = mealType {
+            checkTime = meal.typicalHour * 60
+        } else {
+            let hour = calendar.component(.hour, from: now)
+            let minute = calendar.component(.minute, from: now)
+            checkTime = hour * 60 + minute
+        }
 
-        if current >= openMin && current <= closeMin {
+        if checkTime >= openMin && checkTime <= closeMin {
             return .open
-        } else if openMin > current && (openMin - current) <= 60 {
+        } else if openMin > checkTime && (openMin - checkTime) <= 60 {
             return .openingSoon
         } else {
             return .closed
@@ -637,6 +770,19 @@ enum OpenStatusHelper {
         if !isPM && h == 12 { h = 0 }
 
         return h * 60 + minute
+    }
+}
+
+// MARK: - MealType Helpers
+
+extension MealType {
+    var typicalHour: Int {
+        switch self {
+        case .breakfast: return 8
+        case .lunch: return 12
+        case .dinner: return 18
+        case .snack: return 15
+        }
     }
 }
 

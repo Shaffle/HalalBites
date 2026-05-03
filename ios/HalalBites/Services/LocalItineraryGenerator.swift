@@ -53,15 +53,14 @@ enum LocalItineraryGenerator {
         let lunchPool = pool.filter { suits(meal: .lunch, restaurant: $0) }
         let dinnerPool = pool.filter { suits(meal: .dinner, restaurant: $0) }
 
-        if breakfastPool.isEmpty {
+        if breakfastPool.count < days {
             let cafeResults = await searchBreakfastSpots(near: coordinate)
-            if !cafeResults.isEmpty {
-                breakfastPool = cafeResults
-            }
+            let existing = Set(breakfastPool.map { $0.name.lowercased() })
+            let extra = cafeResults.filter { !existing.contains($0.name.lowercased()) }
+            breakfastPool.append(contentsOf: extra)
         }
 
-        var usedInTrip: Set<UUID> = []
-        var indices: [MealType: Int] = [.breakfast: 0, .lunch: 0, .dinner: 0]
+        var usedForMeal: [MealType: Set<UUID>] = [:]
         var itineraryDays: [ItineraryDay] = []
 
         for dayNumber in 1...max(1, days) {
@@ -87,31 +86,22 @@ enum LocalItineraryGenerator {
                 }
 
                 let mealPool = filterOpenOn(day: dayName, restaurants: baseMealPool, fallback: baseMealPool)
+                let mealUsed = usedForMeal[meal, default: []]
 
-                var idx = indices[meal, default: 0]
-                var restaurant = mealPool[idx % mealPool.count]
-                var attempts = 0
+                let fresh = mealPool.filter { !mealUsed.contains($0.id) && !usedToday.contains($0.id) }
+                let todayFresh = mealPool.filter { !usedToday.contains($0.id) }
 
-                while (usedInTrip.contains(restaurant.id) || usedToday.contains(restaurant.id)) && attempts < mealPool.count {
-                    idx += 1
-                    restaurant = mealPool[idx % mealPool.count]
-                    attempts += 1
+                let restaurant: Restaurant
+                if let pick = fresh.randomElement() {
+                    restaurant = pick
+                } else if let pick = todayFresh.randomElement() {
+                    restaurant = pick
+                } else {
+                    restaurant = mealPool.randomElement() ?? mealPool[0]
                 }
 
-                if usedInTrip.contains(restaurant.id) || usedToday.contains(restaurant.id) {
-                    idx = indices[meal, default: 0]
-                    restaurant = mealPool[idx % mealPool.count]
-                    attempts = 0
-                    while usedToday.contains(restaurant.id) && attempts < mealPool.count {
-                        idx += 1
-                        restaurant = mealPool[idx % mealPool.count]
-                        attempts += 1
-                    }
-                }
-
-                indices[meal] = idx + 1
+                usedForMeal[meal, default: []].insert(restaurant.id)
                 usedToday.insert(restaurant.id)
-                usedInTrip.insert(restaurant.id)
 
                 stops.append(ItineraryStop(
                     id: UUID(),
