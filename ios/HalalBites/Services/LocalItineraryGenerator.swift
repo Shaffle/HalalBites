@@ -58,7 +58,7 @@ enum LocalItineraryGenerator {
             let morningFriendly = pool.filter { r in
                 if r.businessHours.isEmpty { return true }
                 guard let earliest = earliestOpenHour(r.businessHours) else { return true }
-                return earliest < 14
+                return earliest < 10
             }
             if morningFriendly.isEmpty {
                 let cafeResults = await searchBreakfastSpots(near: coordinate)
@@ -86,11 +86,10 @@ enum LocalItineraryGenerator {
                     if !breakfastPool.isEmpty {
                         baseMealPool = breakfastPool
                     } else {
-                        // Hard filter: never assign a restaurant that opens after 2 PM
                         let notEvening = pool.filter { r in
                             if r.businessHours.isEmpty { return true }
                             guard let earliest = earliestOpenHour(r.businessHours) else { return true }
-                            return earliest < 14
+                            return earliest < 10
                         }
                         if !notEvening.isEmpty {
                             baseMealPool = notEvening
@@ -320,13 +319,17 @@ enum LocalItineraryGenerator {
         case .breakfast:
             let keywords = ["bakery", "cafe", "café", "breakfast", "brunch",
                             "pastry", "sweets", "coffee", "diner", "donut", "bagel"]
-            if keywords.contains(where: { name.contains($0) || cuisine.contains($0) }) {
-                return true
+            let isBreakfastType = keywords.contains(where: { name.contains($0) || cuisine.contains($0) })
+            let isVegFriendly = restaurant.halalCertificationLevel == .vegetarian
+                || restaurant.halalCertificationLevel == .vegan
+
+            if restaurant.businessHours.isEmpty {
+                return isBreakfastType || isVegFriendly
             }
-            if let open = earliestOpenHour(restaurant.businessHours), open <= 9 {
-                return true
+            guard let earliest = earliestOpenHour(restaurant.businessHours) else {
+                return isBreakfastType || isVegFriendly
             }
-            return false
+            return earliest < 10
 
         case .lunch:
             guard !restaurant.businessHours.isEmpty else { return true }

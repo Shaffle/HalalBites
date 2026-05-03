@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import WebKit
 
 struct ItineraryDetailView: View {
     @Binding var itinerary: Itinerary
@@ -162,21 +163,13 @@ struct StopDetailSheet: View {
                     travelSection(travel)
                 }
 
-                if let notes = stop.notes {
-                    Text(notes)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .italic()
-                }
-
                 Divider()
 
                 photosSection
 
-                if !restaurant.businessHours.isEmpty {
-                    Divider()
-                    hoursSection
-                }
+                Divider()
+
+                menuSection
 
                 Divider()
 
@@ -223,10 +216,6 @@ struct StopDetailSheet: View {
 
     private func travelSection(_ travel: TravelInfo) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("From your location")
-                .font(.subheadline.bold())
-                .foregroundStyle(.primary)
-
             HStack(spacing: 20) {
                 HStack(spacing: 6) {
                     Image(systemName: "figure.walk")
@@ -271,13 +260,25 @@ struct StopDetailSheet: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text(stop.mealType.rawValue.capitalized)
-                .font(.caption.bold())
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.teal.opacity(0.15))
-                .foregroundStyle(.teal)
-                .clipShape(Capsule())
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(stop.mealType.rawValue.capitalized)
+                    .font(.caption.bold())
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(.teal.opacity(0.15))
+                    .foregroundStyle(.teal)
+                    .clipShape(Capsule())
+
+                if let status = OpenStatusHelper.status(for: restaurant.businessHours) {
+                    Text(status.label)
+                        .font(.caption.bold())
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(status.color.opacity(0.15))
+                        .foregroundStyle(status.color)
+                        .clipShape(Capsule())
+                }
+            }
         }
     }
 
@@ -360,22 +361,37 @@ struct StopDetailSheet: View {
             }
     }
 
-    // MARK: - Hours
+    // MARK: - Menu
 
-    private var hoursSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Hours of Operation")
+    private var menuSearchURL: URL? {
+        let query = "\(restaurant.name) menu"
+            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        return URL(string: "https://www.google.com/search?q=\(query)")
+    }
+
+    private var menuSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Menu")
                 .font(.headline)
 
-            ForEach(restaurant.businessHours, id: \.day) { entry in
-                HStack {
-                    Text(entry.day)
+            if let notes = stop.notes {
+                HStack(spacing: 8) {
+                    Image(systemName: "fork.knife")
+                        .foregroundStyle(.orange)
+                    Text(notes)
                         .font(.subheadline)
-                        .frame(width: 100, alignment: .leading)
-                    Text(entry.hours)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .italic()
                 }
+            }
+
+            if let url = menuSearchURL {
+                MenuWebView(url: url)
+                    .frame(height: 400)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(.separator), lineWidth: 0.5)
+                    )
             }
         }
     }
@@ -451,6 +467,15 @@ struct ItineraryStopRow: View {
                 Text(stop.restaurant.name)
                     .font(.headline)
                 Spacer()
+                if let status = OpenStatusHelper.status(for: stop.restaurant.businessHours) {
+                    Text(status.label)
+                        .font(.caption2.bold())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(status.color.opacity(0.15))
+                        .foregroundStyle(status.color)
+                        .clipShape(Capsule())
+                }
                 Text(stop.mealType.rawValue.capitalized)
                     .font(.caption)
                     .padding(.horizontal, 8)
@@ -539,4 +564,95 @@ struct HalalBadge: View {
             .font(.caption.bold())
             .foregroundStyle(color)
     }
+}
+
+// MARK: - Open Status
+
+enum OpenStatus {
+    case open, closed, openingSoon
+
+    var label: String {
+        switch self {
+        case .open: return "Open"
+        case .closed: return "Closed"
+        case .openingSoon: return "Opening Soon"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .open: return .green
+        case .closed: return .red
+        case .openingSoon: return .orange
+        }
+    }
+}
+
+enum OpenStatusHelper {
+    static func status(for hours: [BusinessHours]) -> OpenStatus? {
+        guard !hours.isEmpty else { return nil }
+        let now = Date()
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        let today = formatter.string(from: now)
+
+        guard let entry = hours.first(where: { $0.day.caseInsensitiveCompare(today) == .orderedSame }) else {
+            return nil
+        }
+
+        if entry.hours.lowercased().contains("closed") { return .closed }
+
+        let parts = entry.hours.components(separatedBy: " - ")
+        guard parts.count == 2,
+              let openMin = parseTimeMinutes(parts[0]),
+              let closeMin = parseTimeMinutes(parts[1]) else { return nil }
+
+        let hour = calendar.component(.hour, from: now)
+        let minute = calendar.component(.minute, from: now)
+        let current = hour * 60 + minute
+
+        if current >= openMin && current <= closeMin {
+            return .open
+        } else if openMin > current && (openMin - current) <= 60 {
+            return .openingSoon
+        } else {
+            return .closed
+        }
+    }
+
+    private static func parseTimeMinutes(_ timeString: String) -> Int? {
+        let trimmed = timeString.trimmingCharacters(in: .whitespaces).uppercased()
+        let isPM = trimmed.hasSuffix("PM")
+        let cleaned = trimmed
+            .replacingOccurrences(of: "AM", with: "")
+            .replacingOccurrences(of: "PM", with: "")
+            .trimmingCharacters(in: .whitespaces)
+        let components = cleaned.components(separatedBy: ":")
+        guard let hour = Int(components[0]) else { return nil }
+        let minute = components.count > 1 ? (Int(components[1]) ?? 0) : 0
+
+        var h = hour
+        if isPM && h != 12 { h += 12 }
+        if !isPM && h == 12 { h = 0 }
+
+        return h * 60 + minute
+    }
+}
+
+// MARK: - Embedded Menu Web View
+
+struct MenuWebView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.isOpaque = false
+        webView.scrollView.bounces = false
+        webView.load(URLRequest(url: url))
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {}
 }
