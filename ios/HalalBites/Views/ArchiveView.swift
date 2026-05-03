@@ -105,6 +105,18 @@ struct ArchiveView: View {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") { selectedItinerary = nil }
                     }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            let trip = itinerary
+                            selectedItinerary = nil
+                            archivedItineraries.removeAll { $0.id == trip.id }
+                            onRestore(trip)
+                        } label: {
+                            Text("Restore")
+                                .bold()
+                                .foregroundStyle(.green)
+                        }
+                    }
                 }
             }
         }
