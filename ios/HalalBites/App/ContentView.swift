@@ -11,6 +11,11 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             TabView {
+                ExploreMapView(itineraries: $itineraries)
+                    .tabItem {
+                        Label("Explore", systemImage: "mappin.and.ellipse")
+                    }
+
                 ItineraryListView(
                     itineraries: $itineraries,
                     showSideMenu: $showSideMenu,
@@ -21,11 +26,6 @@ struct ContentView: View {
                 .tabItem {
                     Label("Itineraries", systemImage: "map")
                 }
-
-                ExploreMapView()
-                    .tabItem {
-                        Label("Explore", systemImage: "mappin.and.ellipse")
-                    }
             }
             .disabled(showSideMenu)
 
