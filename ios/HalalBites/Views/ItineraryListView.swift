@@ -46,8 +46,10 @@ struct ItineraryListView: View {
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: { showingGenerator = true }) {
-                        Label("Generate", systemImage: "sparkles")
+                    if !itineraries.isEmpty {
+                        Button(action: { showingGenerator = true }) {
+                            Label("Generate", systemImage: "sparkles")
+                        }
                     }
                 }
             }
@@ -71,20 +73,29 @@ struct ItineraryListView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             Image(systemName: "fork.knife.circle")
-                .font(.system(size: 64))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 72))
+                .foregroundStyle(.teal)
+
             Text("No trips planned")
-                .font(.headline)
-            HStack(spacing: 4) {
-                Text("Click the")
-                Image(systemName: "sparkles")
-                    .foregroundStyle(.teal)
-                Text("to start!")
+                .font(.title2.bold())
+
+            Button {
+                showingGenerator = true
+            } label: {
+                HStack(spacing: 8) {
+                    Text("Tap here")
+                    Image(systemName: "sparkles")
+                    Text("to start!")
+                }
+                .font(.title3.bold())
+                .padding(.horizontal, 28)
+                .padding(.vertical, 14)
+                .background(Color.teal)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
         }
     }
 

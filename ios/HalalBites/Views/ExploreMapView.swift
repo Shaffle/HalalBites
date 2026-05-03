@@ -37,15 +37,15 @@ enum FoodType: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .burgers: return "flame.fill"
-        case .pizza: return "circle.grid.2x2.fill"
-        case .kebabs: return "fork.knife"
-        case .biryani: return "takeoutbag.and.cup.and.straw.fill"
-        case .shawarma: return "leaf.fill"
-        case .chicken: return "bird.fill"
-        case .seafood: return "fish.fill"
-        case .desserts: return "birthday.cake.fill"
-        case .coffee: return "cup.and.saucer.fill"
+        case .burgers: return "🍔"
+        case .pizza: return "🍕"
+        case .kebabs: return "🍢"
+        case .biryani: return "🍚"
+        case .shawarma: return "🌯"
+        case .chicken: return "🍗"
+        case .seafood: return "🐟"
+        case .desserts: return "🍰"
+        case .coffee: return "☕"
         }
     }
 
@@ -88,6 +88,7 @@ struct ExploreMapView: View {
     @State private var manualCity = ""
     @State private var showManualSearch = false
     @State private var searchText = ""
+    @State private var searchExpanded = false
     @State private var selectedFoodType: FoodType?
     @State private var showFilters = false
     @State private var selectedMosque: MosqueLocation?
@@ -134,13 +135,33 @@ struct ExploreMapView: View {
                 }
             }
             .mapControls {
-                MapUserLocationButton()
                 MapCompass()
                 MapScaleView()
             }
 
             VStack(spacing: 0) {
-                searchBar
+                HStack(alignment: .top, spacing: 8) {
+                    searchBar
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            position = .userLocation(fallback: .region(
+                                MKCoordinateRegion(
+                                    center: CLLocationCoordinate2D(latitude: 33.3062, longitude: -111.8413),
+                                    span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                                )
+                            ))
+                        }
+                    } label: {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.blue)
+                            .frame(width: 40, height: 40)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                    }
+                    .padding(.trailing, 12)
+                    .padding(.top, 8)
+                }
                 foodTypeFilters
 
                 if locationDenied {
@@ -198,20 +219,35 @@ struct ExploreMapView: View {
 
     private var searchBar: some View {
         HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Search restaurants…", text: $searchText)
-                .textFieldStyle(.plain)
-            if !searchText.isEmpty {
-                Button { searchText = "" } label: {
+            if searchExpanded {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Search restaurants…", text: $searchText)
+                    .textFieldStyle(.plain)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        searchText = ""
+                        searchExpanded = false
+                    }
+                } label: {
                     Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        searchExpanded = true
+                    }
+                } label: {
+                    Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
                 }
             }
         }
         .padding(10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal, 12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+        .padding(.leading, 12)
         .padding(.top, 8)
     }
 
@@ -263,7 +299,7 @@ struct ExploreMapView: View {
                                 }
                             } label: {
                                 HStack(spacing: 5) {
-                                    Image(systemName: type.icon)
+                                    Text(type.icon)
                                         .font(.caption2)
                                     Text(type.rawValue)
                                         .font(.caption.bold())
