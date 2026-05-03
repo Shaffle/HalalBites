@@ -93,6 +93,7 @@ struct ItineraryDetailView: View {
     @State private var swapTarget: SwapTarget?
     @State private var showDayFeedback = false
     @State private var lastPromptedDay = 0
+    @State private var activitiesByDay: [UUID: [NearbyActivity]] = [:]
 
     private var currentTripDay: Int {
         let cal = Calendar.current
@@ -141,6 +142,7 @@ struct ItineraryDetailView: View {
                     day: day,
                     dayName: dayName(for: day.dayNumber),
                     dateString: shortDate(for: day.dayNumber),
+                    activities: activitiesByDay[day.id] ?? [],
                     onSelectStop: { selectedStop = $0 },
                     onSwap: canSwap(dayNumber: day.dayNumber) ? { stopIdx in
                         swapTarget = SwapTarget(dayIndex: dayIdx, stopIndex: stopIdx)
@@ -152,6 +154,9 @@ struct ItineraryDetailView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle("\(itinerary.city) · \(itinerary.durationDays)d")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            activitiesByDay = await ActivitySearch.searchAllDays(for: itinerary.days)
+        }
         .onAppear {
             let key = "lastPromptedDay_\(itinerary.id.uuidString)"
             lastPromptedDay = UserDefaults.standard.integer(forKey: key)
@@ -232,49 +237,73 @@ struct NearbyActivity: Identifiable {
 
 enum ActivitySearch {
     private static let queries = ["things to do", "attractions", "parks", "museum", "shopping", "entertainment"]
+    private static let tenMiles: Double = 16_093
 
-    static func searchActivities(near stops: [ItineraryStop]) async -> [NearbyActivity] {
-        guard let anchor = stops.first(where: { $0.mealType == .lunch }) ?? stops.first else { return [] }
-        let coord = anchor.restaurant.coordinate
-        let region = MKCoordinateRegion(center: coord, latitudinalMeters: 3000, longitudinalMeters: 3000)
+    static func searchActivities(
+        near stops: [ItineraryStop],
+        excluding usedNames: Set<String>
+    ) async -> [NearbyActivity] {
+        guard !stops.isEmpty else { return [] }
 
         var results: [NearbyActivity] = []
-        var seenNames: Set<String> = []
+        var seenNames = usedNames
 
-        for query in queries {
-            let request = MKLocalSearch.Request()
-            request.naturalLanguageQuery = query
-            request.region = region
+        for stop in stops {
+            let coord = stop.restaurant.coordinate
+            let region = MKCoordinateRegion(center: coord, latitudinalMeters: tenMiles, longitudinalMeters: tenMiles)
 
-            guard let response = try? await MKLocalSearch(request: request).start() else { continue }
+            for query in queries {
+                let request = MKLocalSearch.Request()
+                request.naturalLanguageQuery = query
+                request.region = region
 
-            for item in response.mapItems {
-                guard let name = item.name,
-                      !seenNames.contains(name.lowercased()) else { continue }
-                seenNames.insert(name.lowercased())
+                guard let response = try? await MKLocalSearch(request: request).start() else { continue }
 
-                let address = [
-                    item.placemark.subThoroughfare,
-                    item.placemark.thoroughfare
-                ].compactMap { $0 }.joined(separator: " ")
+                for item in response.mapItems {
+                    guard let name = item.name,
+                          !seenNames.contains(name.lowercased()) else { continue }
+                    seenNames.insert(name.lowercased())
 
-                let category = item.pointOfInterestCategory?.rawValue
-                    .replacingOccurrences(of: "MKPOICategory", with: "")
-                    ?? "Activity"
+                    let address = [
+                        item.placemark.subThoroughfare,
+                        item.placemark.thoroughfare
+                    ].compactMap { $0 }.joined(separator: " ")
 
-                results.append(NearbyActivity(
-                    name: name,
-                    category: category,
-                    address: address.isEmpty ? "Nearby" : address,
-                    coordinate: item.placemark.coordinate,
-                    nearRestaurant: anchor.restaurant.name
-                ))
+                    let category = item.pointOfInterestCategory?.rawValue
+                        .replacingOccurrences(of: "MKPOICategory", with: "")
+                        ?? "Activity"
+
+                    results.append(NearbyActivity(
+                        name: name,
+                        category: category,
+                        address: address.isEmpty ? "Nearby" : address,
+                        coordinate: item.placemark.coordinate,
+                        nearRestaurant: stop.restaurant.name
+                    ))
+                }
+
+                if results.count >= 3 { break }
             }
 
             if results.count >= 3 { break }
         }
 
         return Array(results.prefix(3))
+    }
+
+    static func searchAllDays(for days: [ItineraryDay]) async -> [UUID: [NearbyActivity]] {
+        var result: [UUID: [NearbyActivity]] = [:]
+        var globalUsedNames: Set<String> = []
+
+        for day in days {
+            let activities = await searchActivities(near: day.stops, excluding: globalUsedNames)
+            result[day.id] = activities
+            for activity in activities {
+                globalUsedNames.insert(activity.name.lowercased())
+            }
+        }
+
+        return result
     }
 }
 
@@ -284,10 +313,9 @@ struct DayPageView: View {
     let day: ItineraryDay
     let dayName: String
     let dateString: String
+    let activities: [NearbyActivity]
     let onSelectStop: (ItineraryStop) -> Void
     let onSwap: ((Int) -> Void)?
-
-    @State private var activities: [NearbyActivity] = []
 
     var body: some View {
         ScrollView {
@@ -316,9 +344,6 @@ struct DayPageView: View {
                 }
             }
             .padding(.vertical, 16)
-        }
-        .task {
-            activities = await ActivitySearch.searchActivities(near: day.stops)
         }
     }
 }
