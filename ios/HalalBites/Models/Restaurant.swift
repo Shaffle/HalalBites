@@ -76,12 +76,14 @@ enum BudgetLevel: Int, CaseIterable, Identifiable, Codable {
 
 enum HalalLevel: Int, Codable, Hashable, CustomStringConvertible, CaseIterable {
     case halal = 1
+    case partiallyHalal = 2
     case vegetarian = 3
     case vegan = 4
 
     var description: String {
         switch self {
         case .halal: return "Halal"
+        case .partiallyHalal: return "Partially Halal"
         case .vegetarian: return "Vegetarian"
         case .vegan: return "Vegan"
         }

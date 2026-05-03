@@ -6,6 +6,12 @@ struct BusinessHours: Hashable, Codable {
     let hours: String
 }
 
+enum ZabihahHalalStatus: String, Hashable {
+    case fullyHalal
+    case partiallyHalal
+    case zabiha
+}
+
 struct ZabihahRestaurant: Identifiable, Hashable {
     let id: String
     let name: String
@@ -18,6 +24,7 @@ struct ZabihahRestaurant: Identifiable, Hashable {
     let reviewCount: Int
     let halalDescription: String?
     let isRestaurant: Bool
+    let halalStatus: ZabihahHalalStatus
     let photoURLs: [URL]
     let businessHours: [BusinessHours]
 
@@ -26,7 +33,19 @@ struct ZabihahRestaurant: Identifiable, Hashable {
     }
 
     var certificationLabel: String {
-        zabiha ? "Zabiha Certified" : "Halal Certified"
+        switch halalStatus {
+        case .zabiha: return "Zabiha Certified"
+        case .partiallyHalal: return "Partially Halal"
+        case .fullyHalal: return "Halal Certified"
+        }
+    }
+
+    var halalLevel: HalalLevel {
+        switch halalStatus {
+        case .zabiha: return .halal
+        case .fullyHalal: return .halal
+        case .partiallyHalal: return .partiallyHalal
+        }
     }
 
     private static let cafeKeywords = ["cafe", "café", "coffee", "bakery", "tea", "pastry", "dessert", "sweets", "donut", "doughnut", "juice", "smoothie"]
@@ -122,13 +141,14 @@ class ZabihahService {
             BusinessHours(day: "Sunday", hours: "12:00 PM - 8:00 PM"),
         ]
         return [
-            ZabihahRestaurant(id: "mock-1", name: "Al Noor Restaurant", address: "123 Main St", latitude: lat + 0.004, longitude: lng + 0.005, cuisineType: "Mediterranean", zabiha: true, rating: 4.5, reviewCount: 0, halalDescription: nil, isRestaurant: true, photoURLs: [], businessHours: mockHours),
-            ZabihahRestaurant(id: "mock-2", name: "Salam Grill", address: "456 Oak Ave", latitude: lat - 0.003, longitude: lng + 0.008, cuisineType: "Middle Eastern", zabiha: true, rating: 4.2, reviewCount: 0, halalDescription: nil, isRestaurant: true, photoURLs: [], businessHours: mockHours),
-            ZabihahRestaurant(id: "mock-3", name: "Karachi Kitchen", address: "789 Elm Rd", latitude: lat + 0.007, longitude: lng - 0.004, cuisineType: "Pakistani", zabiha: false, rating: 4.7, reviewCount: 0, halalDescription: nil, isRestaurant: true, photoURLs: [], businessHours: mockHours),
-            ZabihahRestaurant(id: "mock-4", name: "Istanbul Kebab House", address: "321 Pine St", latitude: lat - 0.006, longitude: lng - 0.007, cuisineType: "Turkish", zabiha: true, rating: 4.3, reviewCount: 0, halalDescription: nil, isRestaurant: true, photoURLs: [], businessHours: mockHours),
-            ZabihahRestaurant(id: "mock-5", name: "Medina Grocery & Halal Meat", address: "654 Maple Dr", latitude: lat + 0.002, longitude: lng - 0.009, cuisineType: "Grocery", zabiha: true, rating: 4.8, reviewCount: 0, halalDescription: nil, isRestaurant: false, photoURLs: [], businessHours: mockHours),
-            ZabihahRestaurant(id: "mock-6", name: "Al Baraka Market", address: "220 Cedar Ln", latitude: lat - 0.005, longitude: lng + 0.003, cuisineType: "Grocery", zabiha: true, rating: 4.4, reviewCount: 0, halalDescription: nil, isRestaurant: false, photoURLs: [], businessHours: mockHours),
-            ZabihahRestaurant(id: "mock-7", name: "Noor Cafe & Bakery", address: "415 Walnut St", latitude: lat + 0.006, longitude: lng + 0.002, cuisineType: "Cafe", zabiha: false, rating: 4.6, reviewCount: 0, halalDescription: nil, isRestaurant: true, photoURLs: [], businessHours: mockHours),
+            ZabihahRestaurant(id: "mock-1", name: "Al Noor Restaurant", address: "123 Main St", latitude: lat + 0.004, longitude: lng + 0.005, cuisineType: "Mediterranean", zabiha: true, rating: 4.5, reviewCount: 0, halalDescription: nil, isRestaurant: true, halalStatus: .zabiha, photoURLs: [], businessHours: mockHours),
+            ZabihahRestaurant(id: "mock-2", name: "Salam Grill", address: "456 Oak Ave", latitude: lat - 0.003, longitude: lng + 0.008, cuisineType: "Middle Eastern", zabiha: true, rating: 4.2, reviewCount: 0, halalDescription: nil, isRestaurant: true, halalStatus: .zabiha, photoURLs: [], businessHours: mockHours),
+            ZabihahRestaurant(id: "mock-3", name: "Karachi Kitchen", address: "789 Elm Rd", latitude: lat + 0.007, longitude: lng - 0.004, cuisineType: "Pakistani", zabiha: false, rating: 4.7, reviewCount: 0, halalDescription: nil, isRestaurant: true, halalStatus: .fullyHalal, photoURLs: [], businessHours: mockHours),
+            ZabihahRestaurant(id: "mock-4", name: "Istanbul Kebab House", address: "321 Pine St", latitude: lat - 0.006, longitude: lng - 0.007, cuisineType: "Turkish", zabiha: true, rating: 4.3, reviewCount: 0, halalDescription: nil, isRestaurant: true, halalStatus: .zabiha, photoURLs: [], businessHours: mockHours),
+            ZabihahRestaurant(id: "mock-5", name: "Medina Grocery & Halal Meat", address: "654 Maple Dr", latitude: lat + 0.002, longitude: lng - 0.009, cuisineType: "Grocery", zabiha: true, rating: 4.8, reviewCount: 0, halalDescription: nil, isRestaurant: false, halalStatus: .fullyHalal, photoURLs: [], businessHours: mockHours),
+            ZabihahRestaurant(id: "mock-6", name: "Al Baraka Market", address: "220 Cedar Ln", latitude: lat - 0.005, longitude: lng + 0.003, cuisineType: "Grocery", zabiha: true, rating: 4.4, reviewCount: 0, halalDescription: nil, isRestaurant: false, halalStatus: .fullyHalal, photoURLs: [], businessHours: mockHours),
+            ZabihahRestaurant(id: "mock-7", name: "Noor Cafe & Bakery", address: "415 Walnut St", latitude: lat + 0.006, longitude: lng + 0.002, cuisineType: "Cafe", zabiha: false, rating: 4.6, reviewCount: 0, halalDescription: nil, isRestaurant: true, halalStatus: .fullyHalal, photoURLs: [], businessHours: mockHours),
+            ZabihahRestaurant(id: "mock-8", name: "Olive Garden", address: "900 Broadway", latitude: lat - 0.002, longitude: lng + 0.006, cuisineType: "Italian", zabiha: false, rating: 3.8, reviewCount: 0, halalDescription: "Partially halal menu available", isRestaurant: true, halalStatus: .partiallyHalal, photoURLs: [], businessHours: mockHours),
         ]
     }
 }
@@ -186,6 +206,19 @@ private struct APIRestaurant: Decodable {
             BusinessHours(day: $0.day, hours: $0.hours)
         }
 
+        let isZabiha = handSlaughtered ?? false
+        let meatStatus = (halalSummary?.meatHalalStatus ?? "").lowercased()
+        let descLower = (halalSummary?.description ?? "").lowercased()
+
+        let status: ZabihahHalalStatus
+        if meatStatus.contains("partial") || descLower.contains("partially halal") || descLower.contains("partial halal") {
+            status = .partiallyHalal
+        } else if isZabiha {
+            status = .zabiha
+        } else {
+            status = .fullyHalal
+        }
+
         return ZabihahRestaurant(
             id: id,
             name: name,
@@ -193,11 +226,12 @@ private struct APIRestaurant: Decodable {
             latitude: Double(latitude) ?? 0,
             longitude: Double(longitude) ?? 0,
             cuisineType: joinedCuisine.isEmpty ? "Restaurant" : joinedCuisine,
-            zabiha: handSlaughtered ?? false,
+            zabiha: isZabiha,
             rating: rating.flatMap { Double($0) },
             reviewCount: reviewCount ?? 0,
             halalDescription: halalSummary?.description,
             isRestaurant: isRestaurant,
+            halalStatus: status,
             photoURLs: allPhotos,
             businessHours: hours
         )

@@ -999,7 +999,7 @@ struct ZabihahRestaurantSheet: View {
             Spacer()
             VStack(alignment: .trailing, spacing: 6) {
                 if !restaurant.isCafe && restaurant.isRestaurant {
-                    ZabihahBadge(zabiha: restaurant.zabiha)
+                    ZabihahBadge(status: restaurant.halalStatus)
                 }
 
                 if let status = OpenStatusHelper.status(for: restaurant.businessHours) {
@@ -1054,11 +1054,11 @@ struct ZabihahRestaurantSheet: View {
 
     private var halalBadge: some View {
         Label(
-            restaurant.zabiha ? "Zabiha Certified" : "Halal Certified",
-            systemImage: "checkmark.seal.fill"
+            restaurant.certificationLabel,
+            systemImage: restaurant.halalStatus == .partiallyHalal ? "exclamationmark.triangle.fill" : "checkmark.seal.fill"
         )
         .font(.caption.bold())
-        .foregroundStyle(.green)
+        .foregroundStyle(restaurant.halalStatus == .partiallyHalal ? .orange : .green)
     }
 
     // MARK: - Travel Info
@@ -1164,7 +1164,7 @@ struct ZabihahRestaurantSheet: View {
         var parts: [String] = []
         parts.append(restaurant.cuisineType)
         if !restaurant.isCafe && restaurant.isRestaurant {
-            parts.append(restaurant.zabiha ? "Zabiha Certified" : "Halal Certified")
+            parts.append(restaurant.certificationLabel)
         }
         if let rating = restaurant.rating, rating > 0 {
             parts.append("\(String(format: "%.1f", rating))★")
@@ -1299,7 +1299,7 @@ struct ZabihahRestaurantSheet: View {
             address: restaurant.address,
             latitude: restaurant.latitude,
             longitude: restaurant.longitude,
-            halalCertificationLevel: restaurant.zabiha ? .halal : .halal,
+            halalCertificationLevel: restaurant.halalLevel,
             cuisineType: restaurant.cuisineType,
             rating: restaurant.rating ?? 0,
             reviewCount: restaurant.reviewCount,
@@ -1376,15 +1376,27 @@ struct ZabihahRestaurantSheet: View {
 }
 
 struct ZabihahBadge: View {
-    let zabiha: Bool
+    let status: ZabihahHalalStatus
+
+    private var label: String {
+        switch status {
+        case .zabiha: return "Zabiha \u{2713}"
+        case .fullyHalal: return "Halal \u{2713}"
+        case .partiallyHalal: return "Partially Halal \u{26A0}"
+        }
+    }
+
+    private var badgeColor: Color {
+        status == .partiallyHalal ? .orange : .teal
+    }
 
     var body: some View {
-        Text(zabiha ? "Zabiha \u{2713}" : "Halal \u{2713}")
+        Text(label)
             .font(.caption.bold())
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(Color.teal.opacity(0.15))
-            .foregroundStyle(.teal)
+            .background(badgeColor.opacity(0.15))
+            .foregroundStyle(badgeColor)
             .clipShape(Capsule())
     }
 }
@@ -1620,7 +1632,7 @@ struct AddToItinerarySheet: View {
             address: restaurant.address,
             latitude: restaurant.latitude,
             longitude: restaurant.longitude,
-            halalCertificationLevel: .halal,
+            halalCertificationLevel: restaurant.halalLevel,
             cuisineType: restaurant.cuisineType,
             rating: restaurant.rating ?? 0,
             reviewCount: restaurant.reviewCount,
@@ -1778,7 +1790,7 @@ struct SwapInItinerarySheet: View {
             address: restaurant.address,
             latitude: restaurant.latitude,
             longitude: restaurant.longitude,
-            halalCertificationLevel: .halal,
+            halalCertificationLevel: restaurant.halalLevel,
             cuisineType: restaurant.cuisineType,
             rating: restaurant.rating ?? 0,
             reviewCount: restaurant.reviewCount,

@@ -55,7 +55,12 @@ enum RecommendationEngine {
         let bestRating = mainStops.compactMap { $0.restaurant.rating > 0 ? $0.restaurant.rating : nil }.max() ?? 0
 
         if r.rating > 0 && r.rating >= bestRating {
-            let cert = r.halalCertificationLevel == .halal ? "Fully halal certified and " : ""
+            let cert: String
+            switch r.halalCertificationLevel {
+            case .halal: cert = "Fully halal certified and "
+            case .partiallyHalal: cert = "Partially halal — "
+            default: cert = ""
+            }
             return StopRecommendation(
                 tier: .bestBet,
                 reason: "This is your best bet for \(meal) — \(cert)the highest rated \(cuisine) spot nearby at \(String(format: "%.1f", r.rating))★"
@@ -1169,13 +1174,23 @@ struct HalalBadge: View {
     private var color: Color {
         switch level {
         case .halal: return .green
+        case .partiallyHalal: return .orange
         case .vegetarian: return .orange
         case .vegan: return .purple
         }
     }
 
+    private var icon: String {
+        switch level {
+        case .halal: return "checkmark.seal.fill"
+        case .partiallyHalal: return "exclamationmark.triangle.fill"
+        case .vegetarian: return "checkmark.seal.fill"
+        case .vegan: return "checkmark.seal.fill"
+        }
+    }
+
     var body: some View {
-        Label(level.description, systemImage: "checkmark.seal.fill")
+        Label(level.description, systemImage: icon)
             .font(.caption.bold())
             .foregroundStyle(color)
     }
