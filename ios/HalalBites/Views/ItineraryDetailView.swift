@@ -3,6 +3,90 @@ import MapKit
 import CoreLocation
 import WebKit
 
+// MARK: - Recommendation System
+
+enum RecommendationTier: String {
+    case bestBet = "Best Bet"
+    case greatChoice = "Great Choice"
+    case worthTheTrip = "Worth the Trip"
+    case quickBite = "Quick Bite"
+
+    var icon: String {
+        switch self {
+        case .bestBet: return "star.fill"
+        case .greatChoice: return "hand.thumbsup.fill"
+        case .worthTheTrip: return "mappin.and.ellipse"
+        case .quickBite: return "bolt.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .bestBet: return .yellow
+        case .greatChoice: return .teal
+        case .worthTheTrip: return .purple
+        case .quickBite: return .orange
+        }
+    }
+}
+
+struct StopRecommendation {
+    let tier: RecommendationTier
+    let reason: String
+}
+
+enum RecommendationEngine {
+    static func recommend(for stop: ItineraryStop, in stops: [ItineraryStop]) -> StopRecommendation {
+        let r = stop.restaurant
+        let cuisine = r.cuisineType
+        let meal = stop.mealType.rawValue
+
+        if stop.mealType == .snack {
+            let lower = cuisine.lowercased()
+            if lower.contains("coffee") || lower.contains("cafe") || lower.contains("café") {
+                return StopRecommendation(tier: .quickBite, reason: "Perfect coffee stop to recharge between meals")
+            } else if lower.contains("bakery") || lower.contains("sweets") || lower.contains("dessert") {
+                return StopRecommendation(tier: .quickBite, reason: "Great spot for a sweet treat to keep you going")
+            }
+            return StopRecommendation(tier: .quickBite, reason: "Convenient quick stop between your main meals")
+        }
+
+        let mainStops = stops.filter { $0.mealType != .snack }
+        let bestRating = mainStops.compactMap { $0.restaurant.rating > 0 ? $0.restaurant.rating : nil }.max() ?? 0
+
+        if r.rating > 0 && r.rating >= bestRating {
+            let cert = r.halalCertificationLevel == .halal ? "Fully halal certified and " : ""
+            return StopRecommendation(
+                tier: .bestBet,
+                reason: "This is your best bet for \(meal) — \(cert)the highest rated \(cuisine) spot nearby at \(String(format: "%.1f", r.rating))★"
+            )
+        } else if r.rating >= 4.0 {
+            return StopRecommendation(
+                tier: .greatChoice,
+                reason: "A great \(meal) option — their \(cuisine) has a strong \(String(format: "%.1f", r.rating))★ rating and solid reviews"
+            )
+        } else if r.rating > 0 {
+            return StopRecommendation(
+                tier: .worthTheTrip,
+                reason: "Worth checking out for their \(cuisine) — a different vibe from your other picks this trip"
+            )
+        } else {
+            if mainStops.first?.id == stop.id {
+                return StopRecommendation(
+                    tier: .bestBet,
+                    reason: "Our top pick for \(meal) — great \(cuisine) that fits your preferences perfectly"
+                )
+            }
+            return StopRecommendation(
+                tier: .greatChoice,
+                reason: "A solid \(meal) pick — good \(cuisine) options that match what you're looking for"
+            )
+        }
+    }
+}
+
+// MARK: - Itinerary Detail View
+
 struct ItineraryDetailView: View {
     @Binding var itinerary: Itinerary
     @State private var selectedStop: ItineraryStop?
@@ -43,29 +127,29 @@ struct ItineraryDetailView: View {
         return formatter.string(from: date)
     }
 
+    private func shortDate(for dayNumber: Int) -> String {
+        let date = Calendar.current.date(byAdding: .day, value: dayNumber - 1, to: itinerary.startDate) ?? itinerary.startDate
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: date)
+    }
+
     var body: some View {
-        List {
+        TabView {
             ForEach(Array(itinerary.days.enumerated()), id: \.element.id) { dayIdx, day in
-                Section("Day \(day.dayNumber)") {
-                    ForEach(Array(day.stops.enumerated()), id: \.element.id) { stopIdx, stop in
-                        ItineraryStopRow(stop: stop, dayName: dayName(for: day.dayNumber))
-                            .contentShape(Rectangle())
-                            .onTapGesture { selectedStop = stop }
-                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                if canSwap(dayNumber: day.dayNumber) {
-                                    Button {
-                                        swapTarget = SwapTarget(dayIndex: dayIdx, stopIndex: stopIdx)
-                                    } label: {
-                                        Label("Swap", systemImage: "arrow.triangle.2.circlepath")
-                                    }
-                                    .tint(.teal)
-                                }
-                            }
-                    }
-                }
+                DayPageView(
+                    day: day,
+                    dayName: dayName(for: day.dayNumber),
+                    dateString: shortDate(for: day.dayNumber),
+                    onSelectStop: { selectedStop = $0 },
+                    onSwap: canSwap(dayNumber: day.dayNumber) ? { stopIdx in
+                        swapTarget = SwapTarget(dayIndex: dayIdx, stopIndex: stopIdx)
+                    } : nil
+                )
             }
         }
-        .listStyle(.insetGrouped)
+        .tabViewStyle(.page(indexDisplayMode: .automatic))
+        .background(Color(.systemGroupedBackground))
         .navigationTitle("\(itinerary.city) · \(itinerary.durationDays)d")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -131,6 +215,237 @@ struct ItineraryDetailView: View {
                     )
                 }
             }
+        }
+    }
+}
+
+// MARK: - Day Page View
+
+struct DayPageView: View {
+    let day: ItineraryDay
+    let dayName: String
+    let dateString: String
+    let onSelectStop: (ItineraryStop) -> Void
+    let onSwap: ((Int) -> Void)?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Day \(day.dayNumber)")
+                        .font(.title.bold())
+                    Text("\(dayName), \(dateString)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 20)
+
+                ForEach(Array(day.stops.enumerated()), id: \.element.id) { stopIdx, stop in
+                    MealStopCard(
+                        stop: stop,
+                        recommendation: RecommendationEngine.recommend(for: stop, in: day.stops),
+                        dayName: dayName,
+                        onDetails: { onSelectStop(stop) },
+                        onSwap: onSwap != nil ? { onSwap?(stopIdx) } : nil
+                    )
+                }
+            }
+            .padding(.vertical, 16)
+        }
+    }
+}
+
+// MARK: - Meal Stop Card
+
+struct MealStopCard: View {
+    let stop: ItineraryStop
+    let recommendation: StopRecommendation
+    let dayName: String
+    let onDetails: () -> Void
+    let onSwap: (() -> Void)?
+
+    @EnvironmentObject var location: LocationService
+    @State private var travel: TravelInfo?
+
+    private var hoursForDay: String? {
+        stop.restaurant.businessHours
+            .first { $0.day.caseInsensitiveCompare(dayName) == .orderedSame }?
+            .hours
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            mealHeader
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
+
+            VStack(alignment: .leading, spacing: 12) {
+                recommendationBanner
+
+                if let firstPhoto = stop.restaurant.photoURLs.first {
+                    AsyncImage(url: firstPhoto) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 140)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        default:
+                            EmptyView()
+                        }
+                    }
+                }
+
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(stop.restaurant.name)
+                            .font(.headline)
+                        Text(stop.restaurant.cuisineType)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    openBadge
+                }
+
+                HStack(spacing: 12) {
+                    if stop.restaurant.rating > 0 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "star.fill")
+                                .foregroundStyle(.yellow)
+                                .font(.caption)
+                            Text(String(format: "%.1f", stop.restaurant.rating))
+                                .font(.caption.bold())
+                        }
+                    }
+                    HalalBadge(level: stop.restaurant.halalCertificationLevel)
+                }
+
+                Label(stop.restaurant.address, systemImage: "mappin.circle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                if let hours = hoursForDay {
+                    Label(hours, systemImage: "clock")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let travel {
+                    HStack(spacing: 10) {
+                        Label("\(travel.walkingTimeMinutes) min", systemImage: "figure.walk")
+                        Label("\(travel.drivingTimeMinutes) min", systemImage: "car.fill")
+                        Text("·")
+                        Text(travel.formattedDistance)
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 8) {
+                    Button {
+                        let placemark = MKPlacemark(coordinate: stop.restaurant.coordinate)
+                        let mapItem = MKMapItem(placemark: placemark)
+                        mapItem.name = stop.restaurant.name
+                        mapItem.openInMaps(launchOptions: [
+                            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                        ])
+                    } label: {
+                        Label("Directions", systemImage: "map.fill")
+                            .font(.caption2.bold())
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.teal)
+
+                    Button { onDetails() } label: {
+                        Label("More Details", systemImage: "info.circle.fill")
+                            .font(.caption2.bold())
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+
+                    if let onSwap {
+                        Button { onSwap() } label: {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.caption2.bold())
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.secondary)
+                    }
+                }
+            }
+            .padding(16)
+            .background(Color(.systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
+            .padding(.horizontal, 16)
+        }
+        .task {
+            guard let userLoc = location.currentLocation else { return }
+            travel = await TravelCalculator.calculate(
+                from: userLoc.coordinate,
+                to: stop.restaurant.coordinate
+            )
+        }
+    }
+
+    private var mealHeader: some View {
+        HStack(spacing: 6) {
+            Image(systemName: stop.mealType.icon)
+                .foregroundStyle(.teal)
+                .font(.subheadline)
+            Text(stop.mealType.rawValue.capitalized)
+                .font(.subheadline.bold())
+        }
+    }
+
+    private var recommendationBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: recommendation.tier.icon)
+                .foregroundStyle(recommendation.tier.color)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(recommendation.tier.rawValue)
+                    .font(.caption.bold())
+                    .foregroundStyle(recommendation.tier.color)
+                Text(recommendation.reason)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(recommendation.tier.color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    @ViewBuilder
+    private var openBadge: some View {
+        let status = OpenStatusHelper.status(
+            for: stop.restaurant.businessHours,
+            mealType: stop.mealType,
+            day: dayName
+        )
+        if let status {
+            Text(status.label)
+                .font(.caption2.bold())
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(status.color.opacity(0.15))
+                .foregroundStyle(status.color)
+                .clipShape(Capsule())
+        } else {
+            Text("Open")
+                .font(.caption2.bold())
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.green.opacity(0.15))
+                .foregroundStyle(.green)
+                .clipShape(Capsule())
         }
     }
 }
@@ -382,8 +697,6 @@ struct StopDetailSheet: View {
         )
     }
 
-    // MARK: - Travel Info
-
     private func travelSection(_ travel: TravelInfo) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 20) {
@@ -417,8 +730,6 @@ struct StopDetailSheet: View {
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
-
-    // MARK: - Header
 
     private var header: some View {
         HStack(alignment: .top) {
@@ -481,8 +792,6 @@ struct StopDetailSheet: View {
         }
     }
 
-    // MARK: - Photos
-
     private var photosSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Photos")
@@ -531,8 +840,6 @@ struct StopDetailSheet: View {
             }
     }
 
-    // MARK: - About
-
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("About")
@@ -572,8 +879,6 @@ struct StopDetailSheet: View {
         return parts.joined(separator: " · ")
     }
 
-    // MARK: - Action Buttons
-
     private var actionButtons: some View {
         VStack(spacing: 10) {
             Button {
@@ -584,7 +889,7 @@ struct StopDetailSheet: View {
                     MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
                 ])
             } label: {
-                Label("Open in Maps", systemImage: "map.fill")
+                Label("Directions", systemImage: "map.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -620,98 +925,6 @@ struct StopDetailSheet: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.orange)
-        }
-    }
-
-}
-
-// MARK: - Stop Row
-
-struct ItineraryStopRow: View {
-    let stop: ItineraryStop
-    let dayName: String
-
-    @EnvironmentObject var location: LocationService
-    @State private var travel: TravelInfo?
-
-    private var hoursForDay: String? {
-        stop.restaurant.businessHours
-            .first { $0.day.caseInsensitiveCompare(dayName) == .orderedSame }?
-            .hours
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(stop.restaurant.name)
-                    .font(.headline)
-                Spacer()
-                openBadge
-                Text(stop.mealType.rawValue.capitalized)
-                    .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(.teal.opacity(0.15))
-                    .foregroundStyle(.teal)
-                    .clipShape(Capsule())
-            }
-
-            Text(stop.restaurant.cuisineType)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            HalalBadge(level: stop.restaurant.halalCertificationLevel)
-
-            if let hours = hoursForDay {
-                Label(hours, systemImage: "clock")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let travel {
-                HStack(spacing: 12) {
-                    Label("\(travel.walkingTimeMinutes) min", systemImage: "figure.walk")
-                    Label("\(travel.drivingTimeMinutes) min", systemImage: "car.fill")
-                    Text("·")
-                    Text(travel.formattedDistance)
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 4)
-        .task {
-            guard let userLoc = location.currentLocation else { return }
-            travel = await TravelCalculator.calculate(
-                from: userLoc.coordinate,
-                to: stop.restaurant.coordinate
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var openBadge: some View {
-        let status = OpenStatusHelper.status(
-            for: stop.restaurant.businessHours,
-            mealType: stop.mealType,
-            day: dayName
-        )
-        if let status {
-            Text(status.label)
-                .font(.caption2.bold())
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(status.color.opacity(0.15))
-                .foregroundStyle(status.color)
-                .clipShape(Capsule())
-        } else {
-            Text("Open")
-                .font(.caption2.bold())
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Color.green.opacity(0.15))
-                .foregroundStyle(.green)
-                .clipShape(Capsule())
         }
     }
 }
@@ -863,6 +1076,15 @@ extension MealType {
         case .lunch: return 12
         case .dinner: return 18
         case .snack: return 15
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .breakfast: return "sunrise.fill"
+        case .lunch: return "sun.max.fill"
+        case .dinner: return "moon.stars.fill"
+        case .snack: return "cup.and.saucer.fill"
         }
     }
 }

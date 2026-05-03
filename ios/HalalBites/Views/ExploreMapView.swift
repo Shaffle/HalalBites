@@ -5,11 +5,19 @@ import WebKit
 
 // MARK: - Mosque Model
 
-struct MosqueLocation: Identifiable {
+struct MosqueLocation: Identifiable, Hashable {
     let id = UUID()
     let name: String
     let coordinate: CLLocationCoordinate2D
     let address: String
+
+    static func == (lhs: MosqueLocation, rhs: MosqueLocation) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
 }
 
 // MARK: - Food Type Filter
@@ -26,6 +34,20 @@ enum FoodType: String, CaseIterable, Identifiable {
     case coffee = "Coffee"
 
     var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .burgers: return "flame.fill"
+        case .pizza: return "circle.grid.2x2.fill"
+        case .kebabs: return "fork.knife"
+        case .biryani: return "takeoutbag.and.cup.and.straw.fill"
+        case .shawarma: return "leaf.fill"
+        case .chicken: return "bird.fill"
+        case .seafood: return "fish.fill"
+        case .desserts: return "birthday.cake.fill"
+        case .coffee: return "cup.and.saucer.fill"
+        }
+    }
 
     var keywords: [String] {
         switch self {
@@ -67,6 +89,8 @@ struct ExploreMapView: View {
     @State private var showManualSearch = false
     @State private var searchText = ""
     @State private var selectedFoodType: FoodType?
+    @State private var showFilters = false
+    @State private var selectedMosque: MosqueLocation?
 
     private var selectedRestaurant: ZabihahRestaurant? {
         restaurants.first { $0.id == selectedID }
@@ -105,6 +129,7 @@ struct ExploreMapView: View {
                 ForEach(mosques) { mosque in
                     Annotation(mosque.name, coordinate: mosque.coordinate, anchor: .bottom) {
                         MosqueMapPin()
+                            .onTapGesture { selectedMosque = mosque }
                     }
                 }
             }
@@ -163,6 +188,10 @@ struct ExploreMapView: View {
             ZabihahRestaurantSheet(restaurant: restaurant, itineraries: $itineraries)
                 .presentationDetents([.large])
         }
+        .sheet(item: $selectedMosque) { mosque in
+            MosqueDetailSheet(mosque: mosque)
+                .presentationDetents([.medium])
+        }
     }
 
     // MARK: - Search Bar
@@ -189,19 +218,69 @@ struct ExploreMapView: View {
     // MARK: - Food Type Filters
 
     private var foodTypeFilters: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                FilterChip(label: "All", isSelected: selectedFoodType == nil) {
-                    selectedFoodType = nil
+        VStack(spacing: 0) {
+            HStack {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showFilters.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                        Text(selectedFoodType?.rawValue ?? "Filters")
+                            .font(.caption.bold())
+                        Image(systemName: showFilters ? "chevron.up" : "chevron.down")
+                            .font(.caption2)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .foregroundStyle(selectedFoodType != nil ? .teal : .primary)
                 }
-                ForEach(FoodType.allCases) { type in
-                    FilterChip(label: type.rawValue, isSelected: selectedFoodType == type) {
-                        selectedFoodType = selectedFoodType == type ? nil : type
+
+                if selectedFoodType != nil {
+                    Button {
+                        selectedFoodType = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
                     }
                 }
+
+                Spacer()
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.top, 6)
+
+            if showFilters {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(FoodType.allCases) { type in
+                            Button {
+                                selectedFoodType = selectedFoodType == type ? nil : type
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showFilters = false
+                                }
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: type.icon)
+                                        .font(.caption2)
+                                    Text(type.rawValue)
+                                        .font(.caption.bold())
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(selectedFoodType == type ? Color.teal : Color(.systemGray5))
+                                .foregroundStyle(selectedFoodType == type ? .white : .primary)
+                                .clipShape(Capsule())
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
     }
 
@@ -630,7 +709,7 @@ struct ZabihahRestaurantSheet: View {
                     MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
                 ])
             } label: {
-                Label("Open in Maps", systemImage: "map.fill")
+                Label("Directions", systemImage: "map.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -759,6 +838,146 @@ struct ZabihahBadge: View {
             .background(Color.teal.opacity(0.15))
             .foregroundStyle(.teal)
             .clipShape(Capsule())
+    }
+}
+
+// MARK: - Mosque Detail Sheet
+
+struct MosqueDetailSheet: View {
+    let mosque: MosqueLocation
+
+    @EnvironmentObject var location: LocationService
+    @State private var travel: TravelInfo?
+    @State private var phoneNumber: String?
+    @State private var loadingDetails = true
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(mosque.name)
+                            .font(.title2.bold())
+                        Text("Mosque")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "moon.fill")
+                        .font(.title3)
+                        .padding(10)
+                        .background(Color.green.opacity(0.15))
+                        .foregroundStyle(.green)
+                        .clipShape(Circle())
+                }
+
+                if !mosque.address.isEmpty {
+                    Label(mosque.address, systemImage: "mappin.circle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let travel {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 20) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "figure.walk")
+                                    .foregroundStyle(.blue)
+                                VStack(alignment: .leading) {
+                                    Text("\(travel.walkingTimeMinutes) min")
+                                        .font(.subheadline.bold())
+                                    Text(travel.formattedDistance)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+
+                            HStack(spacing: 6) {
+                                Image(systemName: "car.fill")
+                                    .foregroundStyle(.teal)
+                                VStack(alignment: .leading) {
+                                    Text("\(travel.drivingTimeMinutes) min")
+                                        .font(.subheadline.bold())
+                                    Text(travel.formattedDistance)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+
+                Divider()
+
+                VStack(spacing: 10) {
+                    Button {
+                        let placemark = MKPlacemark(coordinate: mosque.coordinate)
+                        let mapItem = MKMapItem(placemark: placemark)
+                        mapItem.name = mosque.name
+                        mapItem.openInMaps(launchOptions: [
+                            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                        ])
+                    } label: {
+                        Label("Directions", systemImage: "map.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+
+                    if let phone = phoneNumber {
+                        Button {
+                            let digits = phone.filter { $0.isNumber || $0 == "+" }
+                            if let url = URL(string: "tel:\(digits)") {
+                                UIApplication.shared.open(url)
+                            }
+                        } label: {
+                            Label("Call \(phone)", systemImage: "phone.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.teal)
+                    } else if loadingDetails {
+                        HStack {
+                            ProgressView()
+                            Text("Looking up details…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, 6)
+                        }
+                    }
+                }
+            }
+            .padding(24)
+        }
+        .task { await lookUpDetails() }
+        .task { await loadTravel() }
+    }
+
+    private func lookUpDetails() async {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = mosque.name
+        request.region = MKCoordinateRegion(
+            center: mosque.coordinate,
+            latitudinalMeters: 500,
+            longitudinalMeters: 500
+        )
+        let item = (try? await MKLocalSearch(request: request).start())?.mapItems.first
+        await MainActor.run {
+            phoneNumber = item?.phoneNumber
+            loadingDetails = false
+        }
+    }
+
+    private func loadTravel() async {
+        guard let userLoc = location.currentLocation else { return }
+        travel = await TravelCalculator.calculate(
+            from: userLoc.coordinate,
+            to: mosque.coordinate
+        )
     }
 }
 
