@@ -85,7 +85,9 @@ enum LocalItineraryGenerator {
                 case .snack:     baseMealPool = pool
                 }
 
-                let mealPool = filterOpenOn(day: dayName, restaurants: baseMealPool, fallback: baseMealPool)
+                let dayFiltered = filterOpenOn(day: dayName, restaurants: baseMealPool, fallback: baseMealPool)
+                let mealPool = dayFiltered.filter { isOpenForMeal($0, meal: meal, day: dayName) }
+                    .isEmpty ? dayFiltered : dayFiltered.filter { isOpenForMeal($0, meal: meal, day: dayName) }
                 let mealUsed = usedForMeal[meal, default: []]
 
                 let fresh = mealPool.filter { !mealUsed.contains($0.id) && !usedToday.contains($0.id) }
@@ -275,6 +277,21 @@ enum LocalItineraryGenerator {
             return true
         }
         return open.isEmpty ? fallback : open
+    }
+
+    private static func isOpenForMeal(_ restaurant: Restaurant, meal: MealType, day: String) -> Bool {
+        guard !restaurant.businessHours.isEmpty else { return true }
+        let entry = restaurant.businessHours.first { $0.day.caseInsensitiveCompare(day) == .orderedSame }
+        guard let hours = entry?.hours else { return true }
+        if hours.lowercased().contains("closed") { return false }
+        let hour: Int
+        switch meal {
+        case .breakfast: hour = 8
+        case .lunch: hour = 12
+        case .dinner: hour = 18
+        case .snack: return true
+        }
+        return isOpenAt(hour: hour, hours: hours)
     }
 
     // MARK: - Meal Suitability

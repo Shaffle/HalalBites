@@ -276,6 +276,9 @@ struct StopDetailSheet: View {
     @State private var phoneNumber: String?
     @State private var loadingPhone = true
     @State private var travel: TravelInfo?
+    @State private var menuURL: URL?
+    @State private var loadingMenu = true
+    @State private var showMenuSheet = false
 
     private var restaurant: Restaurant { stop.restaurant }
 
@@ -297,7 +300,7 @@ struct StopDetailSheet: View {
 
                 Divider()
 
-                menuSection
+                aboutSection
 
                 Divider()
 
@@ -306,14 +309,40 @@ struct StopDetailSheet: View {
             .padding(24)
         }
         .task {
-            await lookUpPhoneNumber()
+            await lookUpDetails()
         }
         .task {
             await loadTravel()
         }
+        .sheet(isPresented: $showMenuSheet) {
+            NavigationStack {
+                Group {
+                    if loadingMenu {
+                        ProgressView("Loading menu…")
+                    } else if let url = menuURL {
+                        MenuWebView(url: url)
+                            .ignoresSafeArea(edges: .bottom)
+                    } else {
+                        let query = "\(restaurant.name) \(restaurant.address) menu"
+                            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                        if let url = URL(string: "https://www.yelp.com/search?find_desc=\(query)") {
+                            MenuWebView(url: url)
+                                .ignoresSafeArea(edges: .bottom)
+                        }
+                    }
+                }
+                .navigationTitle("Menu")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showMenuSheet = false }
+                    }
+                }
+            }
+        }
     }
 
-    private func lookUpPhoneNumber() async {
+    private func lookUpDetails() async {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = restaurant.name
         request.region = MKCoordinateRegion(
@@ -324,11 +353,17 @@ struct StopDetailSheet: View {
 
         let search = MKLocalSearch(request: request)
         let response = try? await search.start()
-        let phone = response?.mapItems.first?.phoneNumber
+        let item = response?.mapItems.first
+        let phone = item?.phoneNumber
+        let website = item?.url
 
         await MainActor.run {
             phoneNumber = phone
             loadingPhone = false
+            if let website, website.host() != nil {
+                menuURL = website
+            }
+            loadingMenu = false
         }
     }
 
@@ -443,7 +478,7 @@ struct StopDetailSheet: View {
 
     private var photosSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Menu & Photos")
+            Text("Photos")
                 .font(.headline)
 
             if restaurant.photoURLs.isEmpty {
@@ -489,18 +524,16 @@ struct StopDetailSheet: View {
             }
     }
 
-    // MARK: - Menu
+    // MARK: - About
 
-    private var menuSearchURL: URL? {
-        let query = "\(restaurant.name) menu"
-            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        return URL(string: "https://www.google.com/search?q=\(query)")
-    }
-
-    private var menuSection: some View {
+    private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Menu")
+            Text("About")
                 .font(.headline)
+
+            Text(restaurantSummary)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
 
             if let notes = stop.notes {
                 HStack(spacing: 8) {
@@ -511,17 +544,25 @@ struct StopDetailSheet: View {
                         .italic()
                 }
             }
+        }
+    }
 
-            if let url = menuSearchURL {
-                MenuWebView(url: url)
-                    .frame(height: 400)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color(.separator), lineWidth: 0.5)
-                    )
+    private var restaurantSummary: String {
+        var parts: [String] = []
+        parts.append(restaurant.cuisineType)
+        parts.append(restaurant.halalCertificationLevel.description)
+        if restaurant.rating > 0 {
+            parts.append("\(String(format: "%.1f", restaurant.rating))★")
+        }
+        if !restaurant.businessHours.isEmpty {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEEE"
+            let today = formatter.string(from: Date())
+            if let entry = restaurant.businessHours.first(where: { $0.day.caseInsensitiveCompare(today) == .orderedSame }) {
+                parts.append("Today: \(entry.hours)")
             }
         }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: - Action Buttons
@@ -565,17 +606,13 @@ struct StopDetailSheet: View {
             }
 
             Button {
-                let query = "\(restaurant.name) \(restaurant.address)"
-                    .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                if let url = URL(string: "https://www.yelp.com/search?find_desc=\(query)") {
-                    UIApplication.shared.open(url)
-                }
+                showMenuSheet = true
             } label: {
-                Label("View on Yelp", systemImage: "star.bubble.fill")
+                Label("View Menu", systemImage: "menucard.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.red)
+            .tint(.orange)
         }
     }
 
