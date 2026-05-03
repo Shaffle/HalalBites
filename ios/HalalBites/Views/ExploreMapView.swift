@@ -216,6 +216,7 @@ struct ExploreMapView: View {
     @State private var selectedActivityType: ActivityType?
     @State private var selectedLandmarkType: LandmarkType?
     @State private var showMosques = true
+    @State private var hasInitiallyLoaded = false
 
     private var selectedRestaurant: ZabihahRestaurant? {
         restaurants.first { $0.id == selectedID }
@@ -329,18 +330,21 @@ struct ExploreMapView: View {
             }
         }
         .onAppear {
-            if let loc = location.currentLocation {
+            if !hasInitiallyLoaded, let loc = location.currentLocation {
+                hasInitiallyLoaded = true
                 centreAndLoad(coordinate: loc.coordinate)
             }
         }
         .onChange(of: location.currentLocation) { _, newLocation in
-            guard let loc = newLocation else { return }
+            guard !hasInitiallyLoaded, let loc = newLocation else { return }
+            hasInitiallyLoaded = true
             centreAndLoad(coordinate: loc.coordinate)
         }
         .onChange(of: location.authorizationStatus) { _, status in
             switch status {
             case .authorizedWhenInUse, .authorizedAlways:
-                if let loc = location.currentLocation {
+                if !hasInitiallyLoaded, let loc = location.currentLocation {
+                    hasInitiallyLoaded = true
                     centreAndLoad(coordinate: loc.coordinate)
                 }
             case .denied, .restricted:
