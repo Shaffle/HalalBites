@@ -392,12 +392,14 @@ enum LocalItineraryGenerator {
 
             guard let response = try? await MKLocalSearch(request: request).start() else { continue }
 
+            let excludedChains = ["starbucks", "dunkin", "mcdonald", "subway"]
             for item in response.mapItems {
                 guard let name = item.name, !seenNames.contains(name.lowercased()) else { continue }
-                seenNames.insert(name.lowercased())
+                let nameLower = name.lowercased()
+                if excludedChains.contains(where: { nameLower.contains($0) }) { continue }
+                seenNames.insert(nameLower)
 
                 let level: HalalLevel
-                let nameLower = name.lowercased()
                 let categories = item.pointOfInterestCategory?.rawValue.lowercased() ?? ""
                 if nameLower.contains("halal") {
                     level = .halal

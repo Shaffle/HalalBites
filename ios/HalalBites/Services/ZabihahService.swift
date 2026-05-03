@@ -28,6 +28,20 @@ struct ZabihahRestaurant: Identifiable, Hashable {
     var certificationLabel: String {
         zabiha ? "Zabiha Certified" : "Halal Certified"
     }
+
+    private static let cafeKeywords = ["cafe", "café", "coffee", "bakery", "tea", "pastry", "dessert", "sweets", "donut", "doughnut", "juice", "smoothie"]
+
+    var isCafe: Bool {
+        let lower = (name + " " + cuisineType).lowercased()
+        return Self.cafeKeywords.contains { lower.contains($0) }
+    }
+
+    private static let excludedChains = ["starbucks", "dunkin", "mcdonald", "subway"]
+
+    var isExcludedChain: Bool {
+        let lower = name.lowercased()
+        return Self.excludedChains.contains { lower.contains($0) }
+    }
 }
 
 class ZabihahService {
@@ -112,7 +126,9 @@ class ZabihahService {
             ZabihahRestaurant(id: "mock-2", name: "Salam Grill", address: "456 Oak Ave", latitude: lat - 0.003, longitude: lng + 0.008, cuisineType: "Middle Eastern", zabiha: true, rating: 4.2, reviewCount: 0, halalDescription: nil, isRestaurant: true, photoURLs: [], businessHours: mockHours),
             ZabihahRestaurant(id: "mock-3", name: "Karachi Kitchen", address: "789 Elm Rd", latitude: lat + 0.007, longitude: lng - 0.004, cuisineType: "Pakistani", zabiha: false, rating: 4.7, reviewCount: 0, halalDescription: nil, isRestaurant: true, photoURLs: [], businessHours: mockHours),
             ZabihahRestaurant(id: "mock-4", name: "Istanbul Kebab House", address: "321 Pine St", latitude: lat - 0.006, longitude: lng - 0.007, cuisineType: "Turkish", zabiha: true, rating: 4.3, reviewCount: 0, halalDescription: nil, isRestaurant: true, photoURLs: [], businessHours: mockHours),
-            ZabihahRestaurant(id: "mock-5", name: "Medina Sweets", address: "654 Maple Dr", latitude: lat + 0.002, longitude: lng - 0.009, cuisineType: "Bakery", zabiha: false, rating: 4.8, reviewCount: 0, halalDescription: nil, isRestaurant: true, photoURLs: [], businessHours: mockHours),
+            ZabihahRestaurant(id: "mock-5", name: "Medina Grocery & Halal Meat", address: "654 Maple Dr", latitude: lat + 0.002, longitude: lng - 0.009, cuisineType: "Grocery", zabiha: true, rating: 4.8, reviewCount: 0, halalDescription: nil, isRestaurant: false, photoURLs: [], businessHours: mockHours),
+            ZabihahRestaurant(id: "mock-6", name: "Al Baraka Market", address: "220 Cedar Ln", latitude: lat - 0.005, longitude: lng + 0.003, cuisineType: "Grocery", zabiha: true, rating: 4.4, reviewCount: 0, halalDescription: nil, isRestaurant: false, photoURLs: [], businessHours: mockHours),
+            ZabihahRestaurant(id: "mock-7", name: "Noor Cafe & Bakery", address: "415 Walnut St", latitude: lat + 0.006, longitude: lng + 0.002, cuisineType: "Cafe", zabiha: false, rating: 4.6, reviewCount: 0, halalDescription: nil, isRestaurant: true, photoURLs: [], businessHours: mockHours),
         ]
     }
 }

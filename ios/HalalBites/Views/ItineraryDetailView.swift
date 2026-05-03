@@ -219,6 +219,65 @@ struct ItineraryDetailView: View {
     }
 }
 
+// MARK: - Nearby Activity
+
+struct NearbyActivity: Identifiable {
+    let id = UUID()
+    let name: String
+    let category: String
+    let address: String
+    let coordinate: CLLocationCoordinate2D
+    let nearRestaurant: String
+}
+
+enum ActivitySearch {
+    private static let queries = ["things to do", "attractions", "parks", "museum", "shopping", "entertainment"]
+
+    static func searchActivities(near stops: [ItineraryStop]) async -> [NearbyActivity] {
+        guard let anchor = stops.first(where: { $0.mealType == .lunch }) ?? stops.first else { return [] }
+        let coord = anchor.restaurant.coordinate
+        let region = MKCoordinateRegion(center: coord, latitudinalMeters: 3000, longitudinalMeters: 3000)
+
+        var results: [NearbyActivity] = []
+        var seenNames: Set<String> = []
+
+        for query in queries {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = query
+            request.region = region
+
+            guard let response = try? await MKLocalSearch(request: request).start() else { continue }
+
+            for item in response.mapItems {
+                guard let name = item.name,
+                      !seenNames.contains(name.lowercased()) else { continue }
+                seenNames.insert(name.lowercased())
+
+                let address = [
+                    item.placemark.subThoroughfare,
+                    item.placemark.thoroughfare
+                ].compactMap { $0 }.joined(separator: " ")
+
+                let category = item.pointOfInterestCategory?.rawValue
+                    .replacingOccurrences(of: "MKPOICategory", with: "")
+                    ?? "Activity"
+
+                results.append(NearbyActivity(
+                    name: name,
+                    category: category,
+                    address: address.isEmpty ? "Nearby" : address,
+                    coordinate: item.placemark.coordinate,
+                    nearRestaurant: anchor.restaurant.name
+                ))
+            }
+
+            if results.count >= 3 { break }
+        }
+
+        return Array(results.prefix(3))
+    }
+}
+
 // MARK: - Day Page View
 
 struct DayPageView: View {
@@ -227,6 +286,8 @@ struct DayPageView: View {
     let dateString: String
     let onSelectStop: (ItineraryStop) -> Void
     let onSwap: ((Int) -> Void)?
+
+    @State private var activities: [NearbyActivity] = []
 
     var body: some View {
         ScrollView {
@@ -249,9 +310,102 @@ struct DayPageView: View {
                         onSwap: onSwap != nil ? { onSwap?(stopIdx) } : nil
                     )
                 }
+
+                if !activities.isEmpty {
+                    SuggestedActivitiesSection(activities: activities)
+                }
             }
             .padding(.vertical, 16)
         }
+        .task {
+            activities = await ActivitySearch.searchActivities(near: day.stops)
+        }
+    }
+}
+
+// MARK: - Suggested Activities Section
+
+struct SuggestedActivitiesSection: View {
+    let activities: [NearbyActivity]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(.purple)
+                    .font(.subheadline)
+                Text("Suggested Activities")
+                    .font(.subheadline.bold())
+            }
+            .padding(.horizontal, 20)
+
+            ForEach(activities) { activity in
+                ActivityCard(activity: activity)
+            }
+        }
+    }
+}
+
+struct ActivityCard: View {
+    let activity: NearbyActivity
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: activityIcon)
+                    .font(.title3)
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Color.purple.opacity(0.8))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(activity.name)
+                        .font(.subheadline.bold())
+                    Text(activity.category)
+                        .font(.caption)
+                        .foregroundStyle(.purple)
+                    Text(activity.address)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text("Near \(activity.nearRestaurant)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .italic()
+                }
+
+                Spacer()
+
+                Button {
+                    let placemark = MKPlacemark(coordinate: activity.coordinate)
+                    let mapItem = MKMapItem(placemark: placemark)
+                    mapItem.name = activity.name
+                    mapItem.openInMaps(launchOptions: [
+                        MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                    ])
+                } label: {
+                    Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.purple)
+                }
+            }
+            .padding(14)
+        }
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
+        .padding(.horizontal, 16)
+    }
+
+    private var activityIcon: String {
+        let lower = (activity.name + " " + activity.category).lowercased()
+        if lower.contains("park") || lower.contains("garden") { return "leaf.fill" }
+        if lower.contains("museum") || lower.contains("gallery") { return "building.columns.fill" }
+        if lower.contains("shop") || lower.contains("mall") || lower.contains("market") { return "bag.fill" }
+        if lower.contains("theater") || lower.contains("cinema") || lower.contains("entertainment") { return "theatermasks.fill" }
+        if lower.contains("gym") || lower.contains("fitness") || lower.contains("sport") { return "figure.run" }
+        if lower.contains("beach") || lower.contains("lake") || lower.contains("river") { return "water.waves" }
+        return "mappin.circle.fill"
     }
 }
 

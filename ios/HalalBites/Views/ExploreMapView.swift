@@ -102,7 +102,7 @@ struct ExploreMapView: View {
     }
 
     private var filteredRestaurants: [ZabihahRestaurant] {
-        var results = restaurants
+        var results = restaurants.filter { !$0.isExcludedChain }
         if !searchText.isEmpty {
             results = results.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText) ||
@@ -123,7 +123,13 @@ struct ExploreMapView: View {
                 UserAnnotation()
                 ForEach(filteredRestaurants) { restaurant in
                     Annotation(restaurant.name, coordinate: restaurant.coordinate, anchor: .bottom) {
-                        HalalMapPin()
+                        if restaurant.isCafe {
+                            CafeMapPin()
+                        } else if restaurant.isRestaurant {
+                            HalalMapPin()
+                        } else {
+                            GroceryMapPin()
+                        }
                     }
                     .tag(restaurant.id)
                 }
@@ -459,6 +465,54 @@ struct HalalMapPin: View {
     }
 }
 
+// MARK: - Cafe Map Pin
+
+struct CafeMapPin: View {
+    private let pinColor = Color.brown.opacity(0.7)
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(pinColor)
+                .frame(width: 36, height: 36)
+                .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+            Image(systemName: "cup.and.saucer.fill")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .overlay(alignment: .bottom) {
+            Triangle()
+                .fill(pinColor)
+                .frame(width: 10, height: 7)
+                .offset(y: 7)
+        }
+    }
+}
+
+// MARK: - Grocery Map Pin
+
+struct GroceryMapPin: View {
+    private let pinColor = Color.orange.opacity(0.65)
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(pinColor)
+                .frame(width: 36, height: 36)
+                .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+            Image(systemName: "cart.fill")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .overlay(alignment: .bottom) {
+            Triangle()
+                .fill(pinColor)
+                .frame(width: 10, height: 7)
+                .offset(y: 7)
+        }
+    }
+}
+
 // MARK: - Mosque Map Pin
 
 struct MosqueMapPin: View {
@@ -505,6 +559,7 @@ struct ZabihahRestaurantSheet: View {
     @State private var loadingMenu = true
     @State private var showMenuSheet = false
     @State private var showAddSheet = false
+    @State private var showSwapSheet = false
     @State private var travel: TravelInfo?
 
     var body: some View {
@@ -513,7 +568,9 @@ struct ZabihahRestaurantSheet: View {
                 header
                 addressRow
                 ratingsRow
-                halalBadge
+                if !restaurant.isCafe && restaurant.isRestaurant {
+                    halalBadge
+                }
 
                 if let travel {
                     travelSection(travel)
@@ -540,6 +597,10 @@ struct ZabihahRestaurantSheet: View {
             AddToItinerarySheet(restaurant: restaurant, itineraries: $itineraries)
                 .presentationDetents([.medium])
         }
+        .sheet(isPresented: $showSwapSheet) {
+            SwapInItinerarySheet(restaurant: restaurant, itineraries: $itineraries)
+                .presentationDetents([.large])
+        }
     }
 
     // MARK: - Header
@@ -555,7 +616,9 @@ struct ZabihahRestaurantSheet: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 6) {
-                ZabihahBadge(zabiha: restaurant.zabiha)
+                if !restaurant.isCafe && restaurant.isRestaurant {
+                    ZabihahBadge(zabiha: restaurant.zabiha)
+                }
 
                 if let status = OpenStatusHelper.status(for: restaurant.businessHours) {
                     Text(status.label)
@@ -718,7 +781,9 @@ struct ZabihahRestaurantSheet: View {
     private var restaurantSummary: String {
         var parts: [String] = []
         parts.append(restaurant.cuisineType)
-        parts.append(restaurant.zabiha ? "Zabiha Certified" : "Halal Certified")
+        if !restaurant.isCafe && restaurant.isRestaurant {
+            parts.append(restaurant.zabiha ? "Zabiha Certified" : "Halal Certified")
+        }
         if let rating = restaurant.rating, rating > 0 {
             parts.append("\(String(format: "%.1f", rating))★")
         }
@@ -792,6 +857,18 @@ struct ZabihahRestaurantSheet: View {
                         .padding(.vertical, 10)
                         .background(Color.teal.opacity(0.15))
                         .foregroundStyle(.teal)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+
+                Button {
+                    showSwapSheet = true
+                } label: {
+                    Label("Swap in Itinerary", systemImage: "arrow.triangle.swap")
+                        .font(.subheadline.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.orange.opacity(0.15))
+                        .foregroundStyle(.orange)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
             }
@@ -1127,5 +1204,162 @@ struct AddToItinerarySheet: View {
 
         let dayIdx = min(selectedDayIndex, itineraries[itIdx].days.count - 1)
         itineraries[itIdx].days[dayIdx].stops.append(stop)
+    }
+}
+
+// MARK: - Swap In Itinerary Sheet
+
+struct SwapInItinerarySheet: View {
+    let restaurant: ZabihahRestaurant
+    @Binding var itineraries: [Itinerary]
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var selectedItineraryID: UUID?
+    @State private var selectedDayIndex = 0
+    @State private var selectedStopID: UUID?
+
+    private var selectedItinerary: Itinerary? {
+        itineraries.first { $0.id == selectedItineraryID }
+    }
+
+    private var currentDayStops: [ItineraryStop] {
+        guard let itinerary = selectedItinerary,
+              selectedDayIndex < itinerary.days.count else { return [] }
+        return itinerary.days[selectedDayIndex].stops
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Trip") {
+                    Picker("Itinerary", selection: $selectedItineraryID) {
+                        Text("Select a trip").tag(nil as UUID?)
+                        ForEach(itineraries) { it in
+                            Text("\(it.city), \(it.country)")
+                                .tag(it.id as UUID?)
+                        }
+                    }
+                }
+
+                if let itinerary = selectedItinerary {
+                    Section("Day") {
+                        Picker("Day", selection: $selectedDayIndex) {
+                            ForEach(Array(itinerary.days.enumerated()), id: \.offset) { idx, day in
+                                Text("Day \(day.dayNumber)").tag(idx)
+                            }
+                        }
+                    }
+
+                    Section("Replace") {
+                        if currentDayStops.isEmpty {
+                            Text("No stops on this day")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(currentDayStops) { stop in
+                                Button {
+                                    selectedStopID = stop.id
+                                } label: {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(stop.restaurant.name)
+                                                .font(.subheadline.bold())
+                                                .foregroundStyle(.primary)
+                                            Text(stop.mealType.rawValue.capitalized)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        Spacer()
+                                        if selectedStopID == stop.id {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundStyle(.orange)
+                                        }
+                                    }
+                                    .padding(.vertical, 2)
+                                }
+                            }
+                        }
+                    }
+
+                    if let stopID = selectedStopID,
+                       let stop = currentDayStops.first(where: { $0.id == stopID }) {
+                        Section {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(stop.restaurant.name)
+                                        .font(.caption)
+                                        .strikethrough()
+                                        .foregroundStyle(.secondary)
+                                    Text(restaurant.name)
+                                        .font(.caption.bold())
+                                        .foregroundStyle(.orange)
+                                }
+                                Spacer()
+                                Image(systemName: "arrow.triangle.swap")
+                                    .foregroundStyle(.orange)
+                            }
+                        } header: {
+                            Text("Preview")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Swap in Itinerary")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Swap") {
+                        performSwap()
+                        dismiss()
+                    }
+                    .disabled(selectedItineraryID == nil || selectedStopID == nil)
+                }
+            }
+            .onChange(of: selectedItineraryID) { _, _ in
+                selectedDayIndex = 0
+                selectedStopID = nil
+            }
+            .onChange(of: selectedDayIndex) { _, _ in
+                selectedStopID = nil
+            }
+        }
+    }
+
+    private func performSwap() {
+        guard let itID = selectedItineraryID,
+              let itIdx = itineraries.firstIndex(where: { $0.id == itID }),
+              let stopID = selectedStopID else { return }
+
+        let dayIdx = min(selectedDayIndex, itineraries[itIdx].days.count - 1)
+        guard let stopIdx = itineraries[itIdx].days[dayIdx].stops.firstIndex(where: { $0.id == stopID }) else { return }
+
+        let existingStop = itineraries[itIdx].days[dayIdx].stops[stopIdx]
+
+        let rest = Restaurant(
+            id: UUID(),
+            name: restaurant.name,
+            address: restaurant.address,
+            latitude: restaurant.latitude,
+            longitude: restaurant.longitude,
+            halalCertificationLevel: .halal,
+            cuisineType: restaurant.cuisineType,
+            rating: restaurant.rating ?? 0,
+            reviewCount: restaurant.reviewCount,
+            phoneNumber: nil,
+            websiteURL: nil,
+            photoURLs: restaurant.photoURLs,
+            businessHours: restaurant.businessHours
+        )
+
+        let newStop = ItineraryStop(
+            id: UUID(),
+            restaurant: rest,
+            mealType: existingStop.mealType,
+            notes: existingStop.notes
+        )
+
+        itineraries[itIdx].days[dayIdx].stops[stopIdx] = newStop
     }
 }
