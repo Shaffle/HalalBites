@@ -36,12 +36,19 @@ struct ItineraryDetailView: View {
         itinerary.days.contains { $0.dayNumber >= currentTripDay }
     }
 
+    private func dayName(for dayNumber: Int) -> String {
+        let date = Calendar.current.date(byAdding: .day, value: dayNumber - 1, to: itinerary.startDate) ?? itinerary.startDate
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        return formatter.string(from: date)
+    }
+
     var body: some View {
         List {
             ForEach(Array(itinerary.days.enumerated()), id: \.element.id) { dayIdx, day in
                 Section("Day \(day.dayNumber)") {
                     ForEach(Array(day.stops.enumerated()), id: \.element.id) { stopIdx, stop in
-                        ItineraryStopRow(stop: stop)
+                        ItineraryStopRow(stop: stop, dayName: dayName(for: day.dayNumber))
                             .contentShape(Rectangle())
                             .onTapGesture { selectedStop = stop }
                             .swipeActions(edge: .leading, allowsFullSwipe: false) {
@@ -622,9 +629,16 @@ struct StopDetailSheet: View {
 
 struct ItineraryStopRow: View {
     let stop: ItineraryStop
+    let dayName: String
 
     @EnvironmentObject var location: LocationService
     @State private var travel: TravelInfo?
+
+    private var hoursForDay: String? {
+        stop.restaurant.businessHours
+            .first { $0.day.caseInsensitiveCompare(dayName) == .orderedSame }?
+            .hours
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -632,15 +646,7 @@ struct ItineraryStopRow: View {
                 Text(stop.restaurant.name)
                     .font(.headline)
                 Spacer()
-                if let status = OpenStatusHelper.status(for: stop.restaurant.businessHours, mealType: stop.mealType) {
-                    Text(status.label)
-                        .font(.caption2.bold())
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(status.color.opacity(0.15))
-                        .foregroundStyle(status.color)
-                        .clipShape(Capsule())
-                }
+                openBadge
                 Text(stop.mealType.rawValue.capitalized)
                     .font(.caption)
                     .padding(.horizontal, 8)
@@ -655,6 +661,12 @@ struct ItineraryStopRow: View {
                 .foregroundStyle(.secondary)
 
             HalalBadge(level: stop.restaurant.halalCertificationLevel)
+
+            if let hours = hoursForDay {
+                Label(hours, systemImage: "clock")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             if let travel {
                 HStack(spacing: 12) {
@@ -674,6 +686,32 @@ struct ItineraryStopRow: View {
                 from: userLoc.coordinate,
                 to: stop.restaurant.coordinate
             )
+        }
+    }
+
+    @ViewBuilder
+    private var openBadge: some View {
+        let status = OpenStatusHelper.status(
+            for: stop.restaurant.businessHours,
+            mealType: stop.mealType,
+            day: dayName
+        )
+        if let status {
+            Text(status.label)
+                .font(.caption2.bold())
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(status.color.opacity(0.15))
+                .foregroundStyle(status.color)
+                .clipShape(Capsule())
+        } else {
+            Text("Open")
+                .font(.caption2.bold())
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.green.opacity(0.15))
+                .foregroundStyle(.green)
+                .clipShape(Capsule())
         }
     }
 }
@@ -754,15 +792,21 @@ enum OpenStatus {
 }
 
 enum OpenStatusHelper {
-    static func status(for hours: [BusinessHours], mealType: MealType? = nil) -> OpenStatus? {
+    static func status(for hours: [BusinessHours], mealType: MealType? = nil, day: String? = nil) -> OpenStatus? {
         guard !hours.isEmpty else { return nil }
         let now = Date()
         let calendar = Calendar.current
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE"
-        let today = formatter.string(from: now)
 
-        guard let entry = hours.first(where: { $0.day.caseInsensitiveCompare(today) == .orderedSame }) else {
+        let targetDay: String
+        if let day {
+            targetDay = day
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEEE"
+            targetDay = formatter.string(from: now)
+        }
+
+        guard let entry = hours.first(where: { $0.day.caseInsensitiveCompare(targetDay) == .orderedSame }) else {
             return nil
         }
 
