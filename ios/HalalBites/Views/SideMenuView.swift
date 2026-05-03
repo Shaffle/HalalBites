@@ -7,6 +7,7 @@ struct SideMenuView: View {
     @Binding var recentlyDeleted: [Itinerary]
     @Binding var favouriteIDs: Set<UUID>
     @Binding var favouriteRestaurantIDs: Set<UUID>
+    @Binding var exploreFavouriteRestaurants: [Restaurant]
     var onRestore: (Itinerary) -> Void
 
     @State private var showArchive = false
@@ -39,6 +40,7 @@ struct SideMenuView: View {
                 ArchiveView(
                     archivedItineraries: $archivedItineraries,
                     favouriteIDs: $favouriteIDs,
+                    favouriteRestaurantIDs: $favouriteRestaurantIDs,
                     recentlyDeleted: $recentlyDeleted,
                     onRestore: onRestore
                 )
@@ -55,7 +57,8 @@ struct SideMenuView: View {
                     itineraries: itineraries,
                     archivedItineraries: archivedItineraries,
                     favouriteIDs: $favouriteIDs,
-                    favouriteRestaurantIDs: $favouriteRestaurantIDs
+                    favouriteRestaurantIDs: $favouriteRestaurantIDs,
+                    exploreFavouriteRestaurants: exploreFavouriteRestaurants
                 )
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {

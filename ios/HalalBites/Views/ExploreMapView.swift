@@ -190,6 +190,8 @@ struct ExploreMapView: View {
     @EnvironmentObject var location: LocationService
     @Binding var itineraries: [Itinerary]
     @Binding var showSideMenu: Bool
+    @Binding var favouriteRestaurantIDs: Set<UUID>
+    @Binding var exploreFavouriteRestaurants: [Restaurant]
 
     @State private var restaurants: [ZabihahRestaurant] = []
     @State private var mosques: [MosqueLocation] = []
@@ -361,7 +363,7 @@ struct ExploreMapView: View {
             get: { selectedRestaurant },
             set: { _ in selectedID = nil }
         )) { restaurant in
-            ZabihahRestaurantSheet(restaurant: restaurant, itineraries: $itineraries)
+            ZabihahRestaurantSheet(restaurant: restaurant, itineraries: $itineraries, favouriteRestaurantIDs: $favouriteRestaurantIDs, exploreFavouriteRestaurants: $exploreFavouriteRestaurants)
                 .presentationDetents([.large])
         }
         .sheet(item: $selectedMosque) { mosque in
@@ -929,6 +931,8 @@ struct Triangle: Shape {
 struct ZabihahRestaurantSheet: View {
     let restaurant: ZabihahRestaurant
     @Binding var itineraries: [Itinerary]
+    @Binding var favouriteRestaurantIDs: Set<UUID>
+    @Binding var exploreFavouriteRestaurants: [Restaurant]
 
     @EnvironmentObject var location: LocationService
     @State private var phoneNumber: String?
@@ -1250,7 +1254,60 @@ struct ZabihahRestaurantSheet: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
             }
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    let rid = stableRestaurantID
+                    if favouriteRestaurantIDs.contains(rid) {
+                        favouriteRestaurantIDs.remove(rid)
+                        exploreFavouriteRestaurants.removeAll { $0.id == rid }
+                    } else {
+                        favouriteRestaurantIDs.insert(rid)
+                        if !exploreFavouriteRestaurants.contains(where: { $0.id == rid }) {
+                            exploreFavouriteRestaurants.append(restaurantFromZabihah)
+                        }
+                    }
+                }
+            } label: {
+                Label(
+                    favouriteRestaurantIDs.contains(stableRestaurantID) ? "Favourited" : "Add to Favourites",
+                    systemImage: favouriteRestaurantIDs.contains(stableRestaurantID) ? "heart.fill" : "heart"
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.pink)
         }
+    }
+
+    private var stableRestaurantID: UUID {
+        if let uuid = UUID(uuidString: restaurant.id) { return uuid }
+        var data = Data(restaurant.id.utf8)
+        while data.count < 16 { data.append(0) }
+        return UUID(uuid: (
+            data[0], data[1], data[2], data[3],
+            data[4], data[5], data[6], data[7],
+            data[8], data[9], data[10], data[11],
+            data[12], data[13], data[14], data[15]
+        ))
+    }
+
+    private var restaurantFromZabihah: Restaurant {
+        Restaurant(
+            id: stableRestaurantID,
+            name: restaurant.name,
+            address: restaurant.address,
+            latitude: restaurant.latitude,
+            longitude: restaurant.longitude,
+            halalCertificationLevel: restaurant.zabiha ? .halal : .halal,
+            cuisineType: restaurant.cuisineType,
+            rating: restaurant.rating ?? 0,
+            reviewCount: restaurant.reviewCount,
+            phoneNumber: nil,
+            websiteURL: nil,
+            photoURLs: restaurant.photoURLs,
+            businessHours: restaurant.businessHours
+        )
     }
 
     // MARK: - Menu Sheet

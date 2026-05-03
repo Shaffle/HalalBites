@@ -6,6 +6,7 @@ struct FavouritesView: View {
     let archivedItineraries: [Itinerary]
     @Binding var favouriteIDs: Set<UUID>
     @Binding var favouriteRestaurantIDs: Set<UUID>
+    let exploreFavouriteRestaurants: [Restaurant]
 
     @State private var selectedRestaurant: Restaurant?
     @State private var selectedTrip: Itinerary?
@@ -15,14 +16,24 @@ struct FavouritesView: View {
     }
 
     private var favouritedRestaurants: [Restaurant] {
-        let allStops = (itineraries + archivedItineraries).flatMap { $0.days.flatMap(\.stops) }
         var seen: Set<UUID> = []
-        return allStops.compactMap { stop -> Restaurant? in
-            guard favouriteRestaurantIDs.contains(stop.restaurant.id),
-                  !seen.contains(stop.restaurant.id) else { return nil }
-            seen.insert(stop.restaurant.id)
-            return stop.restaurant
+        var results: [Restaurant] = []
+
+        let allStops = (itineraries + archivedItineraries).flatMap { $0.days.flatMap(\.stops) }
+        for stop in allStops {
+            let rid = stop.restaurant.id
+            guard favouriteRestaurantIDs.contains(rid), !seen.contains(rid) else { continue }
+            seen.insert(rid)
+            results.append(stop.restaurant)
         }
+
+        for restaurant in exploreFavouriteRestaurants {
+            guard favouriteRestaurantIDs.contains(restaurant.id), !seen.contains(restaurant.id) else { continue }
+            seen.insert(restaurant.id)
+            results.append(restaurant)
+        }
+
+        return results
     }
 
     private var isEmpty: Bool {

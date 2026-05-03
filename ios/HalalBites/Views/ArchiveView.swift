@@ -3,8 +3,11 @@ import SwiftUI
 struct ArchiveView: View {
     @Binding var archivedItineraries: [Itinerary]
     @Binding var favouriteIDs: Set<UUID>
+    @Binding var favouriteRestaurantIDs: Set<UUID>
     @Binding var recentlyDeleted: [Itinerary]
     var onRestore: (Itinerary) -> Void
+
+    @State private var selectedItinerary: Itinerary?
 
     var body: some View {
         Group {
@@ -24,22 +27,30 @@ struct ArchiveView: View {
             } else {
                 List {
                     ForEach(archivedItineraries) { itinerary in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("\(itinerary.city), \(itinerary.country)")
-                                    .font(.headline)
-                                Text("\(itinerary.durationDays) days · \(itinerary.days.flatMap(\.stops).count) stops")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                        Button {
+                            selectedItinerary = itinerary
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("\(itinerary.city), \(itinerary.country)")
+                                        .font(.headline)
+                                        .foregroundStyle(.primary)
+                                    Text("\(itinerary.durationDays) days · \(itinerary.days.flatMap(\.stops).count) stops")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if favouriteIDs.contains(itinerary.id) {
+                                    Image(systemName: "heart.fill")
+                                        .foregroundStyle(.pink)
+                                        .font(.subheadline)
+                                }
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
                             }
-                            Spacer()
-                            if favouriteIDs.contains(itinerary.id) {
-                                Image(systemName: "heart.fill")
-                                    .foregroundStyle(.pink)
-                                    .font(.subheadline)
-                            }
+                            .padding(.vertical, 4)
                         }
-                        .padding(.vertical, 4)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
                                 withAnimation {
@@ -67,6 +78,15 @@ struct ArchiveView: View {
                                 )
                             }
                             .tint(.pink)
+                            Button {
+                                withAnimation {
+                                    archivedItineraries.removeAll { $0.id == itinerary.id }
+                                    onRestore(itinerary)
+                                }
+                            } label: {
+                                Label("Restore", systemImage: "arrow.uturn.backward")
+                            }
+                            .tint(.teal)
                         }
                     }
                 }
@@ -75,5 +95,18 @@ struct ArchiveView: View {
         }
         .navigationTitle("Archive")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $selectedItinerary) { itinerary in
+            NavigationStack {
+                ItineraryDetailView(
+                    itinerary: .constant(itinerary),
+                    favouriteRestaurantIDs: $favouriteRestaurantIDs
+                )
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { selectedItinerary = nil }
+                    }
+                }
+            }
+        }
     }
 }

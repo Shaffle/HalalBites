@@ -30,6 +30,12 @@ struct ItineraryListView: View {
                                 } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
+                                Button {
+                                    archiveItinerary(itinerary)
+                                } label: {
+                                    Label("Archive", systemImage: "archivebox")
+                                }
+                                .tint(.orange)
                             }
                         }
                     }
@@ -128,6 +134,15 @@ struct ItineraryListView: View {
             favouriteIDs.remove(itinerary.id)
             if !recentlyDeleted.contains(where: { $0.id == itinerary.id }) {
                 recentlyDeleted.insert(itinerary, at: 0)
+            }
+        }
+    }
+
+    private func archiveItinerary(_ itinerary: Itinerary) {
+        withAnimation {
+            itineraries.removeAll { $0.id == itinerary.id }
+            if !archivedItineraries.contains(where: { $0.id == itinerary.id }) {
+                archivedItineraries.insert(itinerary, at: 0)
             }
         }
     }
