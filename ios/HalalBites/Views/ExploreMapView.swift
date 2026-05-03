@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import WebKit
 
 // MARK: - Mosque Model
 
@@ -9,6 +10,41 @@ struct MosqueLocation: Identifiable {
     let name: String
     let coordinate: CLLocationCoordinate2D
     let address: String
+}
+
+// MARK: - Food Type Filter
+
+enum FoodType: String, CaseIterable, Identifiable {
+    case burgers = "Burgers"
+    case pizza = "Pizza"
+    case kebabs = "Kebabs"
+    case biryani = "Biryani"
+    case shawarma = "Shawarma"
+    case chicken = "Chicken"
+    case seafood = "Seafood"
+    case desserts = "Desserts"
+    case coffee = "Coffee"
+
+    var id: String { rawValue }
+
+    var keywords: [String] {
+        switch self {
+        case .burgers: return ["burger", "burgers", "smash"]
+        case .pizza: return ["pizza", "pizzeria"]
+        case .kebabs: return ["kebab", "kabob", "kabab", "grill"]
+        case .biryani: return ["biryani", "biriyani", "pakistani", "indian", "south asian"]
+        case .shawarma: return ["shawarma", "gyro", "doner", "wrap"]
+        case .chicken: return ["chicken", "wings", "fried chicken", "poultry"]
+        case .seafood: return ["seafood", "fish", "shrimp"]
+        case .desserts: return ["dessert", "bakery", "sweets", "pastry", "cake", "ice cream"]
+        case .coffee: return ["coffee", "cafe", "café", "tea"]
+        }
+    }
+
+    func matches(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return keywords.contains { lower.contains($0) }
+    }
 }
 
 // MARK: - Explore Map
@@ -30,7 +66,7 @@ struct ExploreMapView: View {
     @State private var manualCity = ""
     @State private var showManualSearch = false
     @State private var searchText = ""
-    @State private var selectedCategory: CuisineCategory?
+    @State private var selectedFoodType: FoodType?
 
     private var selectedRestaurant: ZabihahRestaurant? {
         restaurants.first { $0.id == selectedID }
@@ -48,8 +84,10 @@ struct ExploreMapView: View {
                 $0.cuisineType.localizedCaseInsensitiveContains(searchText)
             }
         }
-        if let category = selectedCategory {
-            results = results.filter { category.matches($0.cuisineType) }
+        if let foodType = selectedFoodType {
+            results = results.filter {
+                foodType.matches($0.cuisineType) || foodType.matches($0.name)
+            }
         }
         return results
     }
@@ -78,7 +116,7 @@ struct ExploreMapView: View {
 
             VStack(spacing: 0) {
                 searchBar
-                categoryFilters
+                foodTypeFilters
 
                 if locationDenied {
                     locationDeniedBanner
@@ -123,7 +161,7 @@ struct ExploreMapView: View {
             set: { _ in selectedID = nil }
         )) { restaurant in
             ZabihahRestaurantSheet(restaurant: restaurant, itineraries: $itineraries)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
         }
     }
 
@@ -148,17 +186,17 @@ struct ExploreMapView: View {
         .padding(.top, 8)
     }
 
-    // MARK: - Category Filters
+    // MARK: - Food Type Filters
 
-    private var categoryFilters: some View {
+    private var foodTypeFilters: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                FilterChip(label: "All", isSelected: selectedCategory == nil) {
-                    selectedCategory = nil
+                FilterChip(label: "All", isSelected: selectedFoodType == nil) {
+                    selectedFoodType = nil
                 }
-                ForEach(CuisineCategory.allCases) { category in
-                    FilterChip(label: category.rawValue, isSelected: selectedCategory == category) {
-                        selectedCategory = selectedCategory == category ? nil : category
+                ForEach(FoodType.allCases) { type in
+                    FilterChip(label: type.rawValue, isSelected: selectedFoodType == type) {
+                        selectedFoodType = selectedFoodType == type ? nil : type
                     }
                 }
             }
@@ -344,40 +382,290 @@ struct Triangle: Shape {
 struct ZabihahRestaurantSheet: View {
     let restaurant: ZabihahRestaurant
     @Binding var itineraries: [Itinerary]
+
+    @EnvironmentObject var location: LocationService
+    @State private var phoneNumber: String?
+    @State private var loadingPhone = true
+    @State private var menuURL: URL?
+    @State private var loadingMenu = true
+    @State private var showMenuSheet = false
     @State private var showAddSheet = false
+    @State private var travel: TravelInfo?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(restaurant.name)
-                        .font(.title2.bold())
-                    Text(restaurant.cuisineType)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                header
+                addressRow
+                ratingsRow
+                halalBadge
+
+                if let travel {
+                    travelSection(travel)
+                }
+
+                Divider()
+
+                photosSection
+
+                Divider()
+
+                aboutSection
+
+                Divider()
+
+                actionButtons
+            }
+            .padding(24)
+        }
+        .task { await lookUpDetails() }
+        .task { await loadTravel() }
+        .sheet(isPresented: $showMenuSheet) { menuSheet }
+        .sheet(isPresented: $showAddSheet) {
+            AddToItinerarySheet(restaurant: restaurant, itineraries: $itineraries)
+                .presentationDetents([.medium])
+        }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(restaurant.name)
+                    .font(.title2.bold())
+                Text(restaurant.cuisineType)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 6) {
+                ZabihahBadge(zabiha: restaurant.zabiha)
+
+                if let status = OpenStatusHelper.status(for: restaurant.businessHours) {
+                    Text(status.label)
+                        .font(.caption.bold())
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(status.color.opacity(0.15))
+                        .foregroundStyle(status.color)
+                        .clipShape(Capsule())
+                } else {
+                    Text("Open")
+                        .font(.caption.bold())
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.green.opacity(0.15))
+                        .foregroundStyle(.green)
+                        .clipShape(Capsule())
+                }
+            }
+        }
+    }
+
+    private var addressRow: some View {
+        Label(restaurant.address, systemImage: "mappin.circle.fill")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+    }
+
+    private var ratingsRow: some View {
+        HStack(spacing: 16) {
+            if let rating = restaurant.rating, rating > 0 {
+                HStack(spacing: 4) {
+                    Image(systemName: "star.fill")
+                        .foregroundStyle(.yellow)
+                    Text(String(format: "%.1f", rating))
+                        .font(.subheadline.bold())
+                }
+            }
+
+            if restaurant.reviewCount > 0 {
+                HStack(spacing: 4) {
+                    Image(systemName: "text.bubble")
+                        .foregroundStyle(.secondary)
+                    Text("\(restaurant.reviewCount) reviews")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                Spacer()
-                ZabihahBadge(zabiha: restaurant.zabiha)
             }
+        }
+    }
 
-            Label(restaurant.address, systemImage: "mappin.circle.fill")
+    private var halalBadge: some View {
+        Label(
+            restaurant.zabiha ? "Zabiha Certified" : "Halal Certified",
+            systemImage: "checkmark.seal.fill"
+        )
+        .font(.caption.bold())
+        .foregroundStyle(.green)
+    }
+
+    // MARK: - Travel Info
+
+    private func travelSection(_ travel: TravelInfo) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 20) {
+                HStack(spacing: 6) {
+                    Image(systemName: "figure.walk")
+                        .foregroundStyle(.blue)
+                    VStack(alignment: .leading) {
+                        Text("\(travel.walkingTimeMinutes) min")
+                            .font(.subheadline.bold())
+                        Text(travel.formattedDistance)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    Image(systemName: "car.fill")
+                        .foregroundStyle(.teal)
+                    VStack(alignment: .leading) {
+                        Text("\(travel.drivingTimeMinutes) min")
+                            .font(.subheadline.bold())
+                        Text(travel.formattedDistance)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    // MARK: - Photos
+
+    private var photosSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Photos")
+                .font(.headline)
+
+            if restaurant.photoURLs.isEmpty {
+                Label("No photos available", systemImage: "photo.on.rectangle.angled")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(restaurant.photoURLs, id: \.absoluteString) { url in
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 200, height: 150)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                case .failure:
+                                    photoPlaceholder
+                                case .empty:
+                                    ProgressView()
+                                        .frame(width: 200, height: 150)
+                                @unknown default:
+                                    photoPlaceholder
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var photoPlaceholder: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(Color(.secondarySystemBackground))
+            .frame(width: 200, height: 150)
+            .overlay {
+                Image(systemName: "photo")
+                    .font(.title2)
+                    .foregroundStyle(.quaternary)
+            }
+    }
+
+    // MARK: - About
+
+    private var aboutSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("About")
+                .font(.headline)
+
+            Text(restaurantSummary)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+        }
+    }
 
-            if let rating = restaurant.rating {
-                HStack(spacing: 4) {
-                    Image(systemName: "star.fill").foregroundStyle(.yellow)
-                    Text(String(format: "%.1f", rating))
-                        .font(.subheadline.bold())
-                    Text("on Zabihah").foregroundStyle(.secondary).font(.subheadline)
+    private var restaurantSummary: String {
+        var parts: [String] = []
+        parts.append(restaurant.cuisineType)
+        parts.append(restaurant.zabiha ? "Zabiha Certified" : "Halal Certified")
+        if let rating = restaurant.rating, rating > 0 {
+            parts.append("\(String(format: "%.1f", rating))★")
+        }
+        if !restaurant.businessHours.isEmpty {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEEE"
+            let today = formatter.string(from: Date())
+            if let entry = restaurant.businessHours.first(where: { $0.day.caseInsensitiveCompare(today) == .orderedSame }) {
+                parts.append("Today: \(entry.hours)")
+            }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    // MARK: - Action Buttons
+
+    private var actionButtons: some View {
+        VStack(spacing: 10) {
+            Button {
+                let placemark = MKPlacemark(coordinate: restaurant.coordinate)
+                let mapItem = MKMapItem(placemark: placemark)
+                mapItem.name = restaurant.name
+                mapItem.openInMaps(launchOptions: [
+                    MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                ])
+            } label: {
+                Label("Open in Maps", systemImage: "map.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.teal)
+
+            if let phone = phoneNumber {
+                Button {
+                    let digits = phone.filter { $0.isNumber || $0 == "+" }
+                    if let url = URL(string: "tel:\(digits)") {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Label("Call \(phone)", systemImage: "phone.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+            } else if loadingPhone {
+                HStack {
+                    ProgressView()
+                    Text("Looking up phone number…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 6)
                 }
             }
 
-            Divider()
-
-            Label("Verified by Zabihah.com", systemImage: "checkmark.shield.fill")
-                .font(.footnote)
-                .foregroundStyle(.green)
+            Button {
+                showMenuSheet = true
+            } label: {
+                Label("View Menu", systemImage: "menucard.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.orange)
 
             if !itineraries.isEmpty {
                 Button {
@@ -392,14 +680,71 @@ struct ZabihahRestaurantSheet: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
             }
+        }
+    }
 
-            Spacer()
+    // MARK: - Menu Sheet
+
+    private var menuSheet: some View {
+        NavigationStack {
+            Group {
+                if loadingMenu {
+                    ProgressView("Loading menu…")
+                } else if let url = menuURL {
+                    ExploreMenuWebView(url: url)
+                        .ignoresSafeArea(edges: .bottom)
+                } else {
+                    let query = "\(restaurant.name) \(restaurant.address) menu"
+                        .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                    if let url = URL(string: "https://www.yelp.com/search?find_desc=\(query)") {
+                        ExploreMenuWebView(url: url)
+                            .ignoresSafeArea(edges: .bottom)
+                    }
+                }
+            }
+            .navigationTitle("Menu")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { showMenuSheet = false }
+                }
+            }
         }
-        .padding(24)
-        .sheet(isPresented: $showAddSheet) {
-            AddToItinerarySheet(restaurant: restaurant, itineraries: $itineraries)
-                .presentationDetents([.medium])
+    }
+
+    // MARK: - Helpers
+
+    private func lookUpDetails() async {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = restaurant.name
+        request.region = MKCoordinateRegion(
+            center: restaurant.coordinate,
+            latitudinalMeters: 500,
+            longitudinalMeters: 500
+        )
+
+        let search = MKLocalSearch(request: request)
+        let response = try? await search.start()
+        let item = response?.mapItems.first
+        let phone = item?.phoneNumber
+        let website = item?.url
+
+        await MainActor.run {
+            phoneNumber = phone
+            loadingPhone = false
+            if let website, website.host() != nil {
+                menuURL = website
+            }
+            loadingMenu = false
         }
+    }
+
+    private func loadTravel() async {
+        guard let userLoc = location.currentLocation else { return }
+        travel = await TravelCalculator.calculate(
+            from: userLoc.coordinate,
+            to: restaurant.coordinate
+        )
     }
 }
 
@@ -415,6 +760,23 @@ struct ZabihahBadge: View {
             .foregroundStyle(.teal)
             .clipShape(Capsule())
     }
+}
+
+// MARK: - Explore Menu Web View
+
+struct ExploreMenuWebView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.isOpaque = false
+        webView.scrollView.bounces = false
+        webView.load(URLRequest(url: url))
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {}
 }
 
 // MARK: - Add to Itinerary Sheet
