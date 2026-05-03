@@ -69,6 +69,121 @@ enum FoodType: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Activity & Landmark Types
+
+enum ActivityType: String, CaseIterable, Identifiable {
+    case parks = "Parks"
+    case museums = "Museums"
+    case shopping = "Shopping"
+    case entertainment = "Entertainment"
+    case sports = "Sports & Fitness"
+    case nightlife = "Nightlife"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .parks: return "🌳"
+        case .museums: return "🏛️"
+        case .shopping: return "🛍️"
+        case .entertainment: return "🎭"
+        case .sports: return "⚽"
+        case .nightlife: return "🌙"
+        }
+    }
+
+    var searchQuery: String {
+        switch self {
+        case .parks: return "parks"
+        case .museums: return "museum"
+        case .shopping: return "shopping mall"
+        case .entertainment: return "entertainment"
+        case .sports: return "sports recreation"
+        case .nightlife: return "nightlife lounge"
+        }
+    }
+}
+
+enum LandmarkType: String, CaseIterable, Identifiable {
+    case historical = "Historical"
+    case scenic = "Scenic Views"
+    case monuments = "Monuments"
+    case architecture = "Architecture"
+    case culturalCenters = "Cultural Centers"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .historical: return "🏰"
+        case .scenic: return "📷"
+        case .monuments: return "🗽"
+        case .architecture: return "🕌"
+        case .culturalCenters: return "🎪"
+        }
+    }
+
+    var searchQuery: String {
+        switch self {
+        case .historical: return "historical site"
+        case .scenic: return "scenic viewpoint"
+        case .monuments: return "monument memorial"
+        case .architecture: return "notable architecture"
+        case .culturalCenters: return "cultural center"
+        }
+    }
+}
+
+enum ExploreFilterCategory: String, CaseIterable, Identifiable {
+    case food = "Food"
+    case activities = "Activities"
+    case mosques = "Mosques"
+    case landmarks = "Landmarks"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .food: return "fork.knife"
+        case .activities: return "figure.walk"
+        case .mosques: return "moon.fill"
+        case .landmarks: return "building.columns.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .food: return .teal
+        case .activities: return .purple
+        case .mosques: return .green
+        case .landmarks: return .indigo
+        }
+    }
+}
+
+// MARK: - Explore Place Model
+
+struct ExplorePlace: Identifiable, Hashable {
+    let id = UUID()
+    let name: String
+    let address: String
+    let coordinate: CLLocationCoordinate2D
+    let category: String
+    let placeType: PlaceType
+
+    enum PlaceType: String, Hashable {
+        case activity, landmark
+    }
+
+    static func == (lhs: ExplorePlace, rhs: ExplorePlace) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
 // MARK: - Explore Map
 
 struct ExploreMapView: View {
@@ -91,7 +206,13 @@ struct ExploreMapView: View {
     @State private var searchExpanded = false
     @State private var selectedFoodType: FoodType?
     @State private var showFilters = false
+    @State private var expandedCategory: ExploreFilterCategory?
     @State private var selectedMosque: MosqueLocation?
+    @State private var explorePlaces: [ExplorePlace] = []
+    @State private var selectedPlace: ExplorePlace?
+    @State private var selectedActivityType: ActivityType?
+    @State private var selectedLandmarkType: LandmarkType?
+    @State private var showMosques = true
 
     private var selectedRestaurant: ZabihahRestaurant? {
         restaurants.first { $0.id == selectedID }
@@ -133,10 +254,23 @@ struct ExploreMapView: View {
                     }
                     .tag(restaurant.id)
                 }
-                ForEach(mosques) { mosque in
-                    Annotation(mosque.name, coordinate: mosque.coordinate, anchor: .bottom) {
-                        MosqueMapPin()
-                            .onTapGesture { selectedMosque = mosque }
+                if showMosques {
+                    ForEach(mosques) { mosque in
+                        Annotation(mosque.name, coordinate: mosque.coordinate, anchor: .bottom) {
+                            MosqueMapPin()
+                                .onTapGesture { selectedMosque = mosque }
+                        }
+                    }
+                }
+                ForEach(explorePlaces) { place in
+                    Annotation(place.name, coordinate: place.coordinate, anchor: .bottom) {
+                        if place.placeType == .activity {
+                            ActivityMapPin()
+                                .onTapGesture { selectedPlace = place }
+                        } else {
+                            LandmarkMapPin()
+                                .onTapGesture { selectedPlace = place }
+                        }
                     }
                 }
             }
@@ -168,7 +302,7 @@ struct ExploreMapView: View {
                     .padding(.trailing, 12)
                     .padding(.top, 8)
                 }
-                foodTypeFilters
+                exploreFilters
 
                 if locationDenied {
                     locationDeniedBanner
@@ -219,6 +353,10 @@ struct ExploreMapView: View {
             MosqueDetailSheet(mosque: mosque)
                 .presentationDetents([.medium])
         }
+        .sheet(item: $selectedPlace) { place in
+            ExplorePlaceSheet(place: place)
+                .presentationDetents([.medium])
+        }
     }
 
     // MARK: - Search Bar
@@ -257,32 +395,56 @@ struct ExploreMapView: View {
         .padding(.top, 8)
     }
 
-    // MARK: - Food Type Filters
+    // MARK: - Explore Filters
 
-    private var foodTypeFilters: some View {
+    private var activeFilterLabel: String {
+        if let food = selectedFoodType { return food.rawValue }
+        if let activity = selectedActivityType { return activity.rawValue }
+        if let landmark = selectedLandmarkType { return landmark.rawValue }
+        if !showMosques { return "Mosques Hidden" }
+        return "Filters"
+    }
+
+    private var hasActiveFilter: Bool {
+        selectedFoodType != nil || selectedActivityType != nil || selectedLandmarkType != nil
+    }
+
+    private func clearAllFilters() {
+        selectedFoodType = nil
+        selectedActivityType = nil
+        selectedLandmarkType = nil
+        showMosques = true
+        explorePlaces = []
+    }
+
+    private var exploreFilters: some View {
         VStack(spacing: 0) {
             HStack {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         showFilters.toggle()
+                        if !showFilters { expandedCategory = nil }
                     }
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                        Text(selectedFoodType?.rawValue ?? "Filters")
+                        Text(activeFilterLabel)
                             .font(.caption.bold())
                         Image(systemName: showFilters ? "chevron.up" : "chevron.down")
                             .font(.caption2)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .foregroundStyle(selectedFoodType != nil ? .teal : .primary)
+                    .background(.regularMaterial, in: Capsule())
+                    .shadow(color: .black.opacity(0.1), radius: 3, y: 1)
+                    .foregroundStyle(hasActiveFilter ? .teal : .primary)
                 }
 
-                if selectedFoodType != nil {
+                if hasActiveFilter {
                     Button {
-                        selectedFoodType = nil
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            clearAllFilters()
+                        }
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
@@ -295,34 +457,152 @@ struct ExploreMapView: View {
             .padding(.top, 6)
 
             if showFilters {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(FoodType.allCases) { type in
-                            Button {
-                                selectedFoodType = selectedFoodType == type ? nil : type
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    showFilters = false
+                VStack(spacing: 0) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(ExploreFilterCategory.allCases) { category in
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        if category == .mosques {
+                                            showMosques.toggle()
+                                        } else {
+                                            expandedCategory = expandedCategory == category ? nil : category
+                                        }
+                                    }
+                                } label: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: category.icon)
+                                            .font(.caption2)
+                                        Text(category.rawValue)
+                                            .font(.caption.bold())
+                                        if category != .mosques {
+                                            Image(systemName: expandedCategory == category ? "chevron.up" : "chevron.down")
+                                                .font(.system(size: 8))
+                                        }
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 7)
+                                    .background(categoryChipBackground(category))
+                                    .foregroundStyle(categoryChipForeground(category))
+                                    .clipShape(Capsule())
                                 }
-                            } label: {
-                                HStack(spacing: 5) {
-                                    Text(type.icon)
-                                        .font(.caption2)
-                                    Text(type.rawValue)
-                                        .font(.caption.bold())
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(selectedFoodType == type ? Color.teal : Color(.systemGray5))
-                                .foregroundStyle(selectedFoodType == type ? .white : .primary)
-                                .clipShape(Capsule())
                             }
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
+
+                    if let expanded = expandedCategory {
+                        subcategoryChips(for: expanded)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
+        }
+    }
+
+    private func categoryChipBackground(_ category: ExploreFilterCategory) -> Color {
+        switch category {
+        case .food: return selectedFoodType != nil ? category.color : Color(.systemGray5)
+        case .activities: return selectedActivityType != nil ? category.color : Color(.systemGray5)
+        case .landmarks: return selectedLandmarkType != nil ? category.color : Color(.systemGray5)
+        case .mosques: return showMosques ? category.color : Color(.systemGray5)
+        }
+    }
+
+    private func categoryChipForeground(_ category: ExploreFilterCategory) -> Color {
+        switch category {
+        case .food: return selectedFoodType != nil ? .white : .primary
+        case .activities: return selectedActivityType != nil ? .white : .primary
+        case .landmarks: return selectedLandmarkType != nil ? .white : .primary
+        case .mosques: return showMosques ? .white : .primary
+        }
+    }
+
+    @ViewBuilder
+    private func subcategoryChips(for category: ExploreFilterCategory) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                switch category {
+                case .food:
+                    ForEach(FoodType.allCases) { type in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedFoodType = selectedFoodType == type ? nil : type
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(type.icon)
+                                    .font(.caption2)
+                                Text(type.rawValue)
+                                    .font(.caption.bold())
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(selectedFoodType == type ? Color.teal : Color(.systemGray6))
+                            .foregroundStyle(selectedFoodType == type ? .white : .primary)
+                            .clipShape(Capsule())
+                        }
+                    }
+                case .activities:
+                    ForEach(ActivityType.allCases) { type in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                if selectedActivityType == type {
+                                    selectedActivityType = nil
+                                    explorePlaces = []
+                                } else {
+                                    selectedActivityType = type
+                                    Task { await searchPlaces(type: .activity, query: type.searchQuery) }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(type.icon)
+                                    .font(.caption2)
+                                Text(type.rawValue)
+                                    .font(.caption.bold())
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(selectedActivityType == type ? Color.purple : Color(.systemGray6))
+                            .foregroundStyle(selectedActivityType == type ? .white : .primary)
+                            .clipShape(Capsule())
+                        }
+                    }
+                case .landmarks:
+                    ForEach(LandmarkType.allCases) { type in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                if selectedLandmarkType == type {
+                                    selectedLandmarkType = nil
+                                    explorePlaces = []
+                                } else {
+                                    selectedLandmarkType = type
+                                    Task { await searchPlaces(type: .landmark, query: type.searchQuery) }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(type.icon)
+                                    .font(.caption2)
+                                Text(type.rawValue)
+                                    .font(.caption.bold())
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(selectedLandmarkType == type ? Color.indigo : Color(.systemGray6))
+                            .foregroundStyle(selectedLandmarkType == type ? .white : .primary)
+                            .clipShape(Capsule())
+                        }
+                    }
+                case .mosques:
+                    EmptyView()
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 6)
         }
     }
 
@@ -420,6 +700,42 @@ struct ExploreMapView: View {
             )
         }
         await MainActor.run { mosques = results }
+    }
+
+    private func searchPlaces(type: ExplorePlace.PlaceType, query: String) async {
+        let center: CLLocationCoordinate2D
+        if let loc = location.currentLocation {
+            center = loc.coordinate
+        } else {
+            center = CLLocationCoordinate2D(latitude: 33.3062, longitude: -111.8413)
+        }
+
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        request.region = MKCoordinateRegion(
+            center: center,
+            span: MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)
+        )
+
+        guard let response = try? await MKLocalSearch(request: request).start() else { return }
+        let results = response.mapItems.compactMap { item -> ExplorePlace? in
+            guard let name = item.name else { return nil }
+            let address = [
+                item.placemark.subThoroughfare,
+                item.placemark.thoroughfare,
+                item.placemark.locality
+            ].compactMap { $0 }.joined(separator: " ")
+
+            return ExplorePlace(
+                name: name,
+                address: address.isEmpty ? "Nearby" : address,
+                coordinate: item.placemark.coordinate,
+                category: query.capitalized,
+                placeType: type
+            )
+        }
+
+        await MainActor.run { explorePlaces = results }
     }
 }
 
@@ -529,6 +845,54 @@ struct MosqueMapPin: View {
         .overlay(alignment: .bottom) {
             Triangle()
                 .fill(Color.green)
+                .frame(width: 10, height: 7)
+                .offset(y: 7)
+        }
+    }
+}
+
+// MARK: - Activity Map Pin
+
+struct ActivityMapPin: View {
+    private let pinColor = Color.purple.opacity(0.8)
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(pinColor)
+                .frame(width: 36, height: 36)
+                .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+            Image(systemName: "figure.walk")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .overlay(alignment: .bottom) {
+            Triangle()
+                .fill(pinColor)
+                .frame(width: 10, height: 7)
+                .offset(y: 7)
+        }
+    }
+}
+
+// MARK: - Landmark Map Pin
+
+struct LandmarkMapPin: View {
+    private let pinColor = Color.indigo.opacity(0.8)
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(pinColor)
+                .frame(width: 36, height: 36)
+                .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+            Image(systemName: "building.columns.fill")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .overlay(alignment: .bottom) {
+            Triangle()
+                .fill(pinColor)
                 .frame(width: 10, height: 7)
                 .offset(y: 7)
         }
@@ -1361,5 +1725,61 @@ struct SwapInItinerarySheet: View {
         )
 
         itineraries[itIdx].days[dayIdx].stops[stopIdx] = newStop
+    }
+}
+
+// MARK: - Explore Place Sheet
+
+struct ExplorePlaceSheet: View {
+    let place: ExplorePlace
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(place.name)
+                            .font(.title2.bold())
+                        Text(place.category)
+                            .font(.subheadline)
+                            .foregroundStyle(place.placeType == .activity ? .purple : .indigo)
+                    }
+                    Spacer()
+                    Image(systemName: place.placeType == .activity ? "figure.walk" : "building.columns.fill")
+                        .font(.title2)
+                        .foregroundStyle(place.placeType == .activity ? .purple : .indigo)
+                }
+
+                Label(place.address, systemImage: "mappin.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Divider()
+
+                Button {
+                    let placemark = MKPlacemark(coordinate: place.coordinate)
+                    let mapItem = MKMapItem(placemark: placemark)
+                    mapItem.name = place.name
+                    mapItem.openInMaps(launchOptions: [
+                        MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                    ])
+                } label: {
+                    Label("Directions", systemImage: "map.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(place.placeType == .activity ? .purple : .indigo)
+
+                Spacer()
+            }
+            .padding(24)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 }
