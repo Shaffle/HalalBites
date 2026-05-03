@@ -1,6 +1,6 @@
 import Foundation
 
-struct Itinerary: Identifiable, Codable {
+struct Itinerary: Identifiable, Codable, Equatable {
     let id: UUID
     let city: String
     let country: String
@@ -19,13 +19,13 @@ struct Itinerary: Identifiable, Codable {
     }
 }
 
-struct ItineraryDay: Identifiable, Codable {
+struct ItineraryDay: Identifiable, Codable, Equatable {
     let id: UUID
     let dayNumber: Int
     var stops: [ItineraryStop]
 }
 
-struct TravelInfo: Codable {
+struct TravelInfo: Codable, Equatable {
     let distanceMeters: Double
     let walkingTimeMinutes: Int
     let drivingTimeMinutes: Int
@@ -39,7 +39,7 @@ struct TravelInfo: Codable {
     }
 }
 
-struct ItineraryStop: Identifiable, Codable {
+struct ItineraryStop: Identifiable, Codable, Equatable {
     let id: UUID
     let restaurant: Restaurant
     let mealType: MealType
