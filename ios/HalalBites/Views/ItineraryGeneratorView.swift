@@ -11,7 +11,6 @@ struct ItineraryGeneratorView: View {
     @State private var country = ""
     @State private var durationDays = 3
     @State private var selectedPreferences: Set<HalalLevel> = [.halal]
-    @State private var selectedCuisines: Set<CuisineCategory> = []
     @State private var budgetLevel: BudgetLevel = .moderate
     @State private var travelDate = Date()
     @State private var isLoading = false
@@ -93,22 +92,6 @@ struct ItineraryGeneratorView: View {
                     }
                 }
 
-                Section {
-                    NavigationLink {
-                        CuisinePickerView(selected: $selectedCuisines)
-                    } label: {
-                        HStack {
-                            Text("Cuisine")
-                            Spacer()
-                            Text(selectedCuisines.isEmpty ? "Any" : selectedCuisines.map(\.rawValue).sorted().joined(separator: ", "))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                } header: {
-                    Text("Cuisine Preferences")
-                }
-
                 if isLoading {
                     Section {
                         HStack {
@@ -185,7 +168,6 @@ struct ItineraryGeneratorView: View {
                 country: country,
                 days: durationDays,
                 preferences: selectedPreferences,
-                cuisines: selectedCuisines,
                 budget: budgetLevel,
                 startDate: travelDate
             )
@@ -202,33 +184,3 @@ struct ItineraryGeneratorView: View {
     }
 }
 
-struct CuisinePickerView: View {
-    @Binding var selected: Set<CuisineCategory>
-
-    var body: some View {
-        List {
-            ForEach(CuisineCategory.allCases) { cuisine in
-                Button {
-                    if selected.contains(cuisine) {
-                        selected.remove(cuisine)
-                    } else {
-                        selected.insert(cuisine)
-                    }
-                } label: {
-                    HStack {
-                        Text(cuisine.rawValue)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if selected.contains(cuisine) {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.teal)
-                                .bold()
-                        }
-                    }
-                }
-            }
-        }
-        .navigationTitle("Cuisine")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
