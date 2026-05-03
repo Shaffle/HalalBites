@@ -15,12 +15,12 @@ struct SplashScreenView: View {
             ContentView()
         } else {
             ZStack {
-                Color.white.ignoresSafeArea()
+                Color(.systemBackground).ignoresSafeArea()
 
                 Circle()
                     .fill(
                         RadialGradient(
-                            colors: [brandTeal.opacity(0.12), brandTeal.opacity(0.0)],
+                            colors: [brandTeal.opacity(0.25), brandTeal.opacity(0.0)],
                             center: .center,
                             startRadius: 0,
                             endRadius: 300
@@ -30,13 +30,13 @@ struct SplashScreenView: View {
                     .opacity(glowOpacity)
 
                 Circle()
-                    .stroke(brandTeal.opacity(0.15), lineWidth: 1.5)
+                    .stroke(brandTeal.opacity(0.35), lineWidth: 2)
                     .frame(width: 320, height: 320)
                     .scaleEffect(ringScale)
                     .opacity(ringOpacity)
 
                 Circle()
-                    .stroke(brandTeal.opacity(0.08), lineWidth: 1)
+                    .stroke(brandTeal.opacity(0.2), lineWidth: 1.5)
                     .frame(width: 450, height: 450)
                     .scaleEffect(ringScale)
                     .opacity(ringOpacity)

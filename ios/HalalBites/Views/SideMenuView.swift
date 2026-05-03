@@ -208,7 +208,7 @@ struct SideMenuRow: View {
                         .font(.caption2.bold())
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(.teal.opacity(0.15))
+                        .background(.teal.opacity(0.2))
                         .foregroundStyle(.teal)
                         .clipShape(Capsule())
                 }

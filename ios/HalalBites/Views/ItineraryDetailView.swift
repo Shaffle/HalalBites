@@ -22,7 +22,7 @@ enum RecommendationTier: String {
 
     var color: Color {
         switch self {
-        case .bestBet: return .yellow
+        case .bestBet: return Color(red: 0.8, green: 0.6, blue: 0.0)
         case .greatChoice: return .teal
         case .worthTheTrip: return .purple
         case .quickBite: return .orange
@@ -604,7 +604,7 @@ struct MealStopCard: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(recommendation.tier.color.opacity(0.08))
+        .background(recommendation.tier.color.opacity(0.15))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
@@ -620,7 +620,7 @@ struct MealStopCard: View {
                 .font(.caption2.bold())
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(status.color.opacity(0.15))
+                .background(status.color.opacity(0.2))
                 .foregroundStyle(status.color)
                 .clipShape(Capsule())
         } else {
@@ -628,7 +628,7 @@ struct MealStopCard: View {
                 .font(.caption2.bold())
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color.green.opacity(0.15))
+                .background(Color.green.opacity(0.2))
                 .foregroundStyle(.green)
                 .clipShape(Capsule())
         }
@@ -932,7 +932,7 @@ struct StopDetailSheet: View {
                     .font(.caption.bold())
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(.teal.opacity(0.15))
+                    .background(.teal.opacity(0.2))
                     .foregroundStyle(.teal)
                     .clipShape(Capsule())
 
@@ -941,7 +941,7 @@ struct StopDetailSheet: View {
                         .font(.caption.bold())
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(status.color.opacity(0.15))
+                        .background(status.color.opacity(0.2))
                         .foregroundStyle(status.color)
                         .clipShape(Capsule())
                 }

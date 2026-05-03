@@ -1011,7 +1011,7 @@ struct ZabihahRestaurantSheet: View {
                         .font(.caption.bold())
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(status.color.opacity(0.15))
+                        .background(status.color.opacity(0.2))
                         .foregroundStyle(status.color)
                         .clipShape(Capsule())
                 } else {
@@ -1019,7 +1019,7 @@ struct ZabihahRestaurantSheet: View {
                         .font(.caption.bold())
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(Color.green.opacity(0.15))
+                        .background(Color.green.opacity(0.2))
                         .foregroundStyle(.green)
                         .clipShape(Capsule())
                 }
@@ -1241,7 +1241,7 @@ struct ZabihahRestaurantSheet: View {
                         .font(.subheadline.bold())
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(Color.teal.opacity(0.15))
+                        .background(Color.teal.opacity(0.2))
                         .foregroundStyle(.teal)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
@@ -1253,7 +1253,7 @@ struct ZabihahRestaurantSheet: View {
                         .font(.subheadline.bold())
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(Color.orange.opacity(0.15))
+                        .background(Color.orange.opacity(0.2))
                         .foregroundStyle(.orange)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
@@ -1399,7 +1399,7 @@ struct ZabihahBadge: View {
             .font(.caption.bold())
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(badgeColor.opacity(0.15))
+            .background(badgeColor.opacity(0.2))
             .foregroundStyle(badgeColor)
             .clipShape(Capsule())
     }
@@ -1430,7 +1430,7 @@ struct MosqueDetailSheet: View {
                     Image(systemName: "moon.fill")
                         .font(.title3)
                         .padding(10)
-                        .background(Color.green.opacity(0.15))
+                        .background(Color.green.opacity(0.2))
                         .foregroundStyle(.green)
                         .clipShape(Circle())
                 }

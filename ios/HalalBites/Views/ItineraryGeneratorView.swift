@@ -126,7 +126,7 @@ struct ItineraryGeneratorView: View {
                         .font(.title3.bold())
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(canGenerate && !isLoading ? Color.teal : Color.gray.opacity(0.4))
+                        .background(canGenerate && !isLoading ? Color.teal : Color.gray.opacity(0.6))
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
