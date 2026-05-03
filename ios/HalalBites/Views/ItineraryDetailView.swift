@@ -89,6 +89,7 @@ enum RecommendationEngine {
 
 struct ItineraryDetailView: View {
     @Binding var itinerary: Itinerary
+    @Binding var favouriteRestaurantIDs: Set<UUID>
     @State private var selectedStop: ItineraryStop?
     @State private var swapTarget: SwapTarget?
     @State private var showDayFeedback = false
@@ -165,7 +166,7 @@ struct ItineraryDetailView: View {
             }
         }
         .sheet(item: $selectedStop) { stop in
-            StopDetailSheet(stop: stop)
+            StopDetailSheet(stop: stop, favouriteRestaurantIDs: $favouriteRestaurantIDs)
                 .presentationDetents([.large])
         }
         .sheet(item: $swapTarget) { target in
@@ -772,6 +773,7 @@ struct DayFeedbackSheet: View {
 
 struct StopDetailSheet: View {
     let stop: ItineraryStop
+    @Binding var favouriteRestaurantIDs: Set<UUID>
 
     @EnvironmentObject var location: LocationService
     @State private var phoneNumber: String?
@@ -1104,6 +1106,24 @@ struct StopDetailSheet: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.orange)
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if favouriteRestaurantIDs.contains(restaurant.id) {
+                        favouriteRestaurantIDs.remove(restaurant.id)
+                    } else {
+                        favouriteRestaurantIDs.insert(restaurant.id)
+                    }
+                }
+            } label: {
+                Label(
+                    favouriteRestaurantIDs.contains(restaurant.id) ? "Favourited" : "Add to Favourites",
+                    systemImage: favouriteRestaurantIDs.contains(restaurant.id) ? "heart.fill" : "heart"
+                )
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.pink)
         }
     }
 }

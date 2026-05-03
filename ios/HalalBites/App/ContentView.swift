@@ -5,13 +5,14 @@ struct ContentView: View {
     @State private var showSideMenu = false
     @State private var itineraries: [Itinerary] = []
     @State private var favouriteIDs: Set<UUID> = []
+    @State private var favouriteRestaurantIDs: Set<UUID> = []
     @State private var archivedItineraries: [Itinerary] = []
     @State private var recentlyDeleted: [Itinerary] = []
 
     var body: some View {
         ZStack {
             TabView {
-                ExploreMapView(itineraries: $itineraries)
+                ExploreMapView(itineraries: $itineraries, showSideMenu: $showSideMenu)
                     .tabItem {
                         Label("Explore", systemImage: "mappin.and.ellipse")
                     }
@@ -20,6 +21,7 @@ struct ContentView: View {
                     itineraries: $itineraries,
                     showSideMenu: $showSideMenu,
                     favouriteIDs: $favouriteIDs,
+                    favouriteRestaurantIDs: $favouriteRestaurantIDs,
                     archivedItineraries: $archivedItineraries,
                     recentlyDeleted: $recentlyDeleted
                 )
@@ -46,6 +48,7 @@ struct ContentView: View {
                 archivedItineraries: $archivedItineraries,
                 recentlyDeleted: $recentlyDeleted,
                 favouriteIDs: $favouriteIDs,
+                favouriteRestaurantIDs: $favouriteRestaurantIDs,
                 onRestore: restoreItinerary
             )
             .zIndex(2)

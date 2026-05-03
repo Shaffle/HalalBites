@@ -4,8 +4,10 @@ struct ItineraryListView: View {
     @Binding var itineraries: [Itinerary]
     @State private var showingGenerator = false
     @State private var presentedItinerary: Itinerary?
+    @State private var showConfetti = false
     @Binding var showSideMenu: Bool
     @Binding var favouriteIDs: Set<UUID>
+    @Binding var favouriteRestaurantIDs: Set<UUID>
     @Binding var archivedItineraries: [Itinerary]
     @Binding var recentlyDeleted: [Itinerary]
 
@@ -58,13 +60,28 @@ struct ItineraryListView: View {
             }
             .fullScreenCover(item: $presentedItinerary) { presented in
                 if let idx = itineraries.firstIndex(where: { $0.id == presented.id }) {
-                    NavigationStack {
-                        ItineraryDetailView(itinerary: $itineraries[idx])
-                            .toolbar {
-                                ToolbarItem(placement: .cancellationAction) {
-                                    Button("Done") { presentedItinerary = nil }
+                    ZStack {
+                        NavigationStack {
+                            ItineraryDetailView(itinerary: $itineraries[idx], favouriteRestaurantIDs: $favouriteRestaurantIDs)
+                                .toolbar {
+                                    ToolbarItem(placement: .cancellationAction) {
+                                        Button("Done") { presentedItinerary = nil }
+                                    }
                                 }
+                        }
+
+                        if showConfetti {
+                            ConfettiView()
+                                .ignoresSafeArea()
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .onAppear {
+                        if showConfetti {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                withAnimation { showConfetti = false }
                             }
+                        }
                     }
                 }
             }
@@ -101,6 +118,7 @@ struct ItineraryListView: View {
 
     private func handleGenerated(_ itinerary: Itinerary) {
         itineraries.insert(itinerary, at: 0)
+        showConfetti = true
         presentedItinerary = itinerary
     }
 
@@ -150,4 +168,61 @@ struct ItineraryRowView: View {
         }
         .padding(.vertical, 4)
     }
+}
+
+// MARK: - Confetti View
+
+struct ConfettiView: View {
+    @State private var particles: [ConfettiParticle] = []
+    @State private var animate = false
+
+    private static let colors: [Color] = [.teal, .orange, .pink, .purple, .yellow, .green, .blue, .red]
+    private static let emojis = ["🎉", "🎊", "✨", "⭐", "🌟"]
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                ForEach(particles) { particle in
+                    Text(particle.emoji)
+                        .font(.system(size: particle.size))
+                        .position(
+                            x: particle.x * geo.size.width,
+                            y: animate ? geo.size.height + 50 : -50
+                        )
+                        .rotationEffect(.degrees(animate ? particle.rotation : 0))
+                        .opacity(animate ? 0 : 1)
+                        .animation(
+                            .easeIn(duration: particle.duration)
+                            .delay(particle.delay),
+                            value: animate
+                        )
+                }
+            }
+        }
+        .onAppear {
+            particles = (0..<50).map { _ in
+                ConfettiParticle(
+                    emoji: Bool.random() ? Self.emojis.randomElement()! : "●",
+                    x: Double.random(in: 0...1),
+                    size: CGFloat.random(in: 12...28),
+                    rotation: Double.random(in: 180...720),
+                    duration: Double.random(in: 2.0...3.5),
+                    delay: Double.random(in: 0...0.8),
+                    color: Self.colors.randomElement()!
+                )
+            }
+            animate = true
+        }
+    }
+}
+
+struct ConfettiParticle: Identifiable {
+    let id = UUID()
+    let emoji: String
+    let x: Double
+    let size: CGFloat
+    let rotation: Double
+    let duration: Double
+    let delay: Double
+    let color: Color
 }

@@ -108,16 +108,38 @@ struct ItineraryGeneratorView: View {
                         Text(error).foregroundStyle(.red)
                     }
                 }
+
+                Section {
+                    Button {
+                        Task { await generate() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isLoading {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Text("Generate")
+                                Image(systemName: "sparkles")
+                                Text("Itinerary")
+                            }
+                        }
+                        .font(.title3.bold())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(canGenerate && !isLoading ? Color.teal : Color.gray.opacity(0.4))
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .disabled(!canGenerate || isLoading)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                }
             }
             .navigationTitle("Plan a Trip")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Generate") { Task { await generate() } }
-                        .disabled(!canGenerate || isLoading)
                 }
             }
             .task {

@@ -189,6 +189,7 @@ struct ExplorePlace: Identifiable, Hashable {
 struct ExploreMapView: View {
     @EnvironmentObject var location: LocationService
     @Binding var itineraries: [Itinerary]
+    @Binding var showSideMenu: Bool
 
     @State private var restaurants: [ZabihahRestaurant] = []
     @State private var mosques: [MosqueLocation] = []
@@ -281,6 +282,20 @@ struct ExploreMapView: View {
 
             VStack(spacing: 0) {
                 HStack(alignment: .top, spacing: 8) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            showSideMenu = true
+                        }
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 40, height: 40)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                    }
+                    .padding(.leading, 12)
+                    .padding(.top, 8)
                     searchBar
                     Button {
                         withAnimation(.easeInOut(duration: 0.25)) {
@@ -391,7 +406,6 @@ struct ExploreMapView: View {
         .padding(10)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-        .padding(.leading, 12)
         .padding(.top, 8)
     }
 
