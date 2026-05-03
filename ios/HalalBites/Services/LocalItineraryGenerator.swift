@@ -53,20 +53,10 @@ enum LocalItineraryGenerator {
         let lunchPool = pool.filter { suits(meal: .lunch, restaurant: $0) }
         let dinnerPool = pool.filter { suits(meal: .dinner, restaurant: $0) }
 
-        // If no halal breakfast spots, search for nearby cafes and vegetarian places
         if breakfastPool.isEmpty {
-            let morningFriendly = pool.filter { r in
-                if r.businessHours.isEmpty { return true }
-                guard let earliest = earliestOpenHour(r.businessHours) else { return true }
-                return earliest < 10
-            }
-            if morningFriendly.isEmpty {
-                let cafeResults = await searchBreakfastSpots(near: coordinate)
-                if !cafeResults.isEmpty {
-                    breakfastPool = cafeResults
-                }
-            } else {
-                breakfastPool = morningFriendly
+            let cafeResults = await searchBreakfastSpots(near: coordinate)
+            if !cafeResults.isEmpty {
+                breakfastPool = cafeResults
             }
         }
 
@@ -86,22 +76,10 @@ enum LocalItineraryGenerator {
                     if !breakfastPool.isEmpty {
                         baseMealPool = breakfastPool
                     } else {
-                        let notEvening = pool.filter { r in
-                            if r.businessHours.isEmpty { return true }
-                            guard let earliest = earliestOpenHour(r.businessHours) else { return true }
-                            return earliest < 10
-                        }
-                        if !notEvening.isEmpty {
-                            baseMealPool = notEvening
-                        } else {
-                            // No morning-friendly halal spots — retry cafe search inline
-                            let cafes = await searchBreakfastSpots(near: coordinate)
-                            if !cafes.isEmpty {
-                                baseMealPool = cafes
-                            } else {
-                                baseMealPool = [makePlaceholderCafe(near: coordinate)]
-                            }
-                        }
+                        let cafes = await searchBreakfastSpots(near: coordinate)
+                        baseMealPool = cafes.isEmpty
+                            ? [makePlaceholderCafe(near: coordinate)]
+                            : cafes
                     }
                 case .lunch:     baseMealPool = lunchPool.isEmpty ? pool : lunchPool
                 case .dinner:    baseMealPool = dinnerPool.isEmpty ? pool : dinnerPool
@@ -318,17 +296,16 @@ enum LocalItineraryGenerator {
         switch meal {
         case .breakfast:
             let keywords = ["bakery", "cafe", "café", "breakfast", "brunch",
-                            "pastry", "sweets", "coffee", "diner", "donut", "bagel"]
+                            "pastry", "sweets", "coffee", "diner", "donut",
+                            "bagel", "pancake", "egg", "morning"]
             let isBreakfastType = keywords.contains(where: { name.contains($0) || cuisine.contains($0) })
             let isVegFriendly = restaurant.halalCertificationLevel == .vegetarian
                 || restaurant.halalCertificationLevel == .vegan
 
-            if restaurant.businessHours.isEmpty {
-                return isBreakfastType || isVegFriendly
-            }
-            guard let earliest = earliestOpenHour(restaurant.businessHours) else {
-                return isBreakfastType || isVegFriendly
-            }
+            guard isBreakfastType || isVegFriendly else { return false }
+
+            if restaurant.businessHours.isEmpty { return true }
+            guard let earliest = earliestOpenHour(restaurant.businessHours) else { return true }
             return earliest < 10
 
         case .lunch:
@@ -390,7 +367,8 @@ enum LocalItineraryGenerator {
     }
 
     private static func searchBreakfastSpots(near coordinate: CLLocationCoordinate2D) async -> [Restaurant] {
-        let queries = ["halal cafe", "halal breakfast", "vegetarian cafe", "bakery", "breakfast"]
+        let queries = ["halal breakfast", "halal cafe", "vegetarian breakfast",
+                       "vegetarian cafe", "coffee shop", "bakery", "breakfast restaurant"]
         let region = MKCoordinateRegion(
             center: coordinate,
             latitudinalMeters: 8000,

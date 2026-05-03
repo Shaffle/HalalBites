@@ -36,6 +36,10 @@ struct ItineraryGeneratorView: View {
                     DatePicker("Start Date", selection: $travelDate, in: Date()..., displayedComponents: .date)
                 }
 
+                Section("Trip Length") {
+                    Stepper("\(durationDays) day\(durationDays == 1 ? "" : "s")", value: $durationDays, in: 1...14)
+                }
+
                 Section("Destination") {
                     Toggle("Use my current location", isOn: $useCurrentLocation)
 
@@ -71,10 +75,6 @@ struct ItineraryGeneratorView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                }
-
-                Section("Trip Length") {
-                    Stepper("\(durationDays) day\(durationDays == 1 ? "" : "s")", value: $durationDays, in: 1...14)
                 }
 
                 Section("Dietary Preferences") {
