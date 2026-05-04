@@ -176,7 +176,7 @@ struct ItineraryDetailView: View {
                             shareText = ItineraryShareManager.shareText(for: code, itinerary: itinerary, profileName: profileName)
                             showShareSheet = true
                         } catch {
-                            shareError = "Could not share. Check your internet connection and iCloud sign-in."
+                            shareError = error.localizedDescription
                         }
                         isUploading = false
                     }

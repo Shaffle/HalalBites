@@ -1,33 +1,49 @@
 import CloudKit
+import Foundation
 
 enum CloudKitShareService {
     private static let publicDB = CKContainer.default().publicCloudDatabase
     private static let recordType = "SharedItinerary"
 
     static func upload(_ itinerary: Itinerary, profileName: String) async throws -> String {
-        let code = generateCode()
-        let recordID = CKRecord.ID(recordName: code)
-        let record = CKRecord(recordType: recordType, recordID: recordID)
-
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let jsonData = try encoder.encode(itinerary)
 
-        record["jsonData"] = String(data: jsonData, encoding: .utf8)
-        record["city"] = itinerary.city
-        record["country"] = itinerary.country
-        record["sharedBy"] = profileName
+        for _ in 0..<3 {
+            let code = generateCode()
+            let recordID = CKRecord.ID(recordName: code)
+            let record = CKRecord(recordType: recordType, recordID: recordID)
 
-        try await publicDB.save(record)
-        return code
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(code).json")
+            try jsonData.write(to: tempURL)
+            record["itineraryFile"] = CKAsset(fileURL: tempURL)
+            record["city"] = itinerary.city as CKRecordValue
+            record["country"] = itinerary.country as CKRecordValue
+            record["sharedBy"] = profileName as CKRecordValue
+
+            do {
+                try await publicDB.save(record)
+                try? FileManager.default.removeItem(at: tempURL)
+                return code
+            } catch let ckError as CKError {
+                try? FileManager.default.removeItem(at: tempURL)
+                if ckError.code == .serverRecordChanged {
+                    continue
+                }
+                throw ckError
+            }
+        }
+        throw ShareError.uploadFailed
     }
 
     static func fetch(code: String) async throws -> Itinerary {
         let recordID = CKRecord.ID(recordName: code)
         let record = try await publicDB.record(for: recordID)
 
-        guard let jsonString = record["jsonData"] as? String,
-              let data = jsonString.data(using: .utf8) else {
+        guard let asset = record["itineraryFile"] as? CKAsset,
+              let fileURL = asset.fileURL,
+              let data = try? Data(contentsOf: fileURL) else {
             throw ShareError.invalidData
         }
 
@@ -55,12 +71,12 @@ enum CloudKitShareService {
 
     enum ShareError: LocalizedError {
         case invalidData
-        case notSignedIn
+        case uploadFailed
 
         var errorDescription: String? {
             switch self {
-            case .invalidData: return "The shared itinerary data is invalid."
-            case .notSignedIn: return "Sign in to iCloud in Settings to share itineraries."
+            case .invalidData: return "The shared itinerary data could not be read."
+            case .uploadFailed: return "Could not upload itinerary. Please try again."
             }
         }
     }
