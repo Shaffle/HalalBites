@@ -847,6 +847,8 @@ struct StopDetailSheet: View {
     @State private var loadingPhone = true
     @State private var travel: TravelInfo?
     @State private var showMenuSheet = false
+    @State private var yelpData: YelpEnrichedData?
+    @State private var enrichedPhotos: [URL] = []
 
     private var restaurant: Restaurant { stop.restaurant }
 
@@ -893,6 +895,11 @@ struct StopDetailSheet: View {
 
                 aboutSection
 
+                if let yelpData, !yelpData.reviews.isEmpty {
+                    Divider()
+                    reviewsSection(yelpData.reviews)
+                }
+
                 Divider()
 
                 actionButtons
@@ -905,21 +912,28 @@ struct StopDetailSheet: View {
         .task {
             await loadTravel()
         }
+        .task {
+            await loadYelpData()
+        }
         .sheet(isPresented: $showMenuSheet) {
             NavigationStack {
-                let query = "\(restaurant.name) \(restaurant.cuisineType) menu"
-                    .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                if let url = URL(string: "https://www.google.com/search?q=\(query)") {
-                    MenuWebView(url: url)
-                        .ignoresSafeArea(edges: .bottom)
-                        .navigationTitle("Menu")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Done") { showMenuSheet = false }
-                            }
+                let menuURL: URL = {
+                    if let yelpURL = yelpData?.yelpURL {
+                        return yelpURL
+                    }
+                    let query = "\(restaurant.name) \(restaurant.cuisineType) menu"
+                        .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                    return URL(string: "https://www.google.com/search?q=\(query)")!
+                }()
+                MenuWebView(url: menuURL)
+                    .ignoresSafeArea(edges: .bottom)
+                    .navigationTitle("Menu")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { showMenuSheet = false }
                         }
-                }
+                    }
             }
         }
     }
@@ -941,6 +955,60 @@ struct StopDetailSheet: View {
         await MainActor.run {
             phoneNumber = phone
             loadingPhone = false
+        }
+    }
+
+    private func loadYelpData() async {
+        guard let data = await YelpService.shared.enrich(
+            name: restaurant.name,
+            latitude: restaurant.latitude,
+            longitude: restaurant.longitude
+        ) else { return }
+
+        await MainActor.run {
+            yelpData = data
+            if phoneNumber == nil, let yelpPhone = data.phone, !yelpPhone.isEmpty {
+                phoneNumber = yelpPhone
+                loadingPhone = false
+            }
+            if !data.photos.isEmpty {
+                enrichedPhotos = data.photos
+            }
+        }
+    }
+
+    private func reviewsSection(_ reviews: [YelpReview]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Text("Reviews")
+                    .font(.headline)
+                Text("via Yelp")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(reviews, id: \.id) { review in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        ForEach(0..<review.rating, id: \.self) { _ in
+                            Image(systemName: "star.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.yellow)
+                        }
+                        Spacer()
+                        Text(review.user.name)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(review.text)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+                .padding(10)
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
         }
     }
 
@@ -1038,19 +1106,24 @@ struct StopDetailSheet: View {
         }
     }
 
+    private var allPhotos: [URL] {
+        let base = restaurant.photoURLs
+        return base.isEmpty ? enrichedPhotos : base
+    }
+
     private var photosSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Photos")
                 .font(.headline)
 
-            if restaurant.photoURLs.isEmpty {
+            if allPhotos.isEmpty {
                 Label("No photos available", systemImage: "photo.on.rectangle.angled")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
-                        ForEach(restaurant.photoURLs, id: \.absoluteString) { url in
+                        ForEach(allPhotos, id: \.absoluteString) { url in
                             AsyncImage(url: url) { phase in
                                 switch phase {
                                 case .success(let image):
@@ -1160,15 +1233,6 @@ struct StopDetailSheet: View {
             }
 
             HStack(spacing: 8) {
-                Button {
-                    showMenuSheet = true
-                } label: {
-                    Label("View Menu", systemImage: "menucard.fill")
-                        .font(.subheadline)
-                }
-                .buttonStyle(.bordered)
-                .tint(.orange)
-
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         if favouriteRestaurantIDs.contains(restaurant.id) {
