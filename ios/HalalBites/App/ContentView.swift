@@ -9,14 +9,18 @@ struct ContentView: View {
     @State private var exploreFavouriteRestaurants: [Restaurant] = []
     @State private var archivedItineraries: [Itinerary] = []
     @State private var recentlyDeleted: [Itinerary] = []
+    @Binding var pendingItinerary: Itinerary?
 
     var body: some View {
         mainContent
             .preferredColorScheme(lightsOn ? .light : .dark)
             .onAppear(perform: loadData)
-            .onOpenURL { url in
-                if let shared = ItineraryShareManager.itinerary(from: url) {
-                    itineraries.insert(shared, at: 0)
+            .onChange(of: pendingItinerary) { _, newValue in
+                if let shared = newValue {
+                    if !itineraries.contains(where: { $0.id == shared.id }) {
+                        itineraries.insert(shared, at: 0)
+                    }
+                    pendingItinerary = nil
                 }
             }
             .modifier(PersistItineraries(itineraries: $itineraries, archivedItineraries: $archivedItineraries, recentlyDeleted: $recentlyDeleted))

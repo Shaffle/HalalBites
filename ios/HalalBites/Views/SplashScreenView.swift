@@ -12,13 +12,14 @@ struct SplashScreenView: View {
     @State private var zoomOpacity = 1.0
     @State private var showContent = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @Binding var pendingItinerary: Itinerary?
     private let brandTeal = Color(red: 0.0, green: 0.58, blue: 0.56)
 
     var body: some View {
         ZStack {
             if showContent {
                 if hasCompletedOnboarding {
-                    ContentView()
+                    ContentView(pendingItinerary: $pendingItinerary)
                         .transition(.opacity)
                 } else {
                     OnboardingView()

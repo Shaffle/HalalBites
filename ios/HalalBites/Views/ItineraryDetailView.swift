@@ -2,7 +2,6 @@ import SwiftUI
 import MapKit
 import CoreLocation
 import WebKit
-import LinkPresentation
 
 // MARK: - Recommendation System
 
@@ -173,8 +172,8 @@ struct ItineraryDetailView: View {
             }
         }
         .sheet(isPresented: $showShareSheet) {
-            if let fileURL = ItineraryShareManager.shareFile(for: itinerary) {
-                ShareSheet(items: [ItineraryShareItem(itinerary: itinerary, fileURL: fileURL, profileName: profileName)])
+            if let text = ItineraryShareManager.shareText(for: itinerary, profileName: profileName) {
+                ShareSheet(items: [text])
             }
         }
         .task {
@@ -1349,54 +1348,3 @@ struct ShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-class ItineraryShareItem: NSObject, UIActivityItemSource {
-    let itinerary: Itinerary
-    let fileURL: URL
-    let profileName: String
-
-    init(itinerary: Itinerary, fileURL: URL, profileName: String) {
-        self.itinerary = itinerary
-        self.fileURL = fileURL
-        self.profileName = profileName
-    }
-
-    func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
-        fileURL
-    }
-
-    func activityViewController(_ activityViewController: UIActivityViewController, itemForActivityType activityType: UIActivity.ActivityType?) -> Any? {
-        fileURL
-    }
-
-    func activityViewController(_ activityViewController: UIActivityViewController, subjectForActivityType activityType: UIActivity.ActivityType?) -> String {
-        "\(profileName) shared their list with you!"
-    }
-
-    func activityViewControllerLinkMetadata(_ activityViewController: UIActivityViewController) -> LPLinkMetadata? {
-        let metadata = LPLinkMetadata()
-        metadata.title = "\(profileName) shared their list with you!"
-
-        if let appIcon = Bundle.main.icon {
-            metadata.iconProvider = NSItemProvider(object: appIcon)
-        }
-
-        return metadata
-    }
-}
-
-extension Bundle {
-    var icon: UIImage? {
-        if let icons = infoDictionary?["CFBundleIcons"] as? [String: Any],
-           let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
-           let files = primary["CFBundleIconFiles"] as? [String],
-           let name = files.last,
-           let image = UIImage(named: name) {
-            return image
-        }
-        if let iconName = infoDictionary?["CFBundleIconName"] as? String,
-           let image = UIImage(named: iconName) {
-            return image
-        }
-        return UIImage(named: "AppIcon")
-    }
-}
