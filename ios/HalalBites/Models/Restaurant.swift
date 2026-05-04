@@ -13,6 +13,7 @@ struct Restaurant: Identifiable, Codable, Hashable {
     let reviewCount: Int
     let phoneNumber: String?
     let websiteURL: String?
+    let halalDescription: String?
     var photoURLs: [URL]
     var businessHours: [BusinessHours]
 

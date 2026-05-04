@@ -549,6 +549,22 @@ struct MealStopCard: View {
                     HalalBadge(level: stop.restaurant.halalCertificationLevel)
                 }
 
+                if stop.restaurant.halalCertificationLevel == .partiallyHalal,
+                   let desc = stop.restaurant.halalDescription, !desc.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.caption2)
+                        Text(desc)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+
                 Label(stop.restaurant.address, systemImage: "mappin.circle.fill")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -838,6 +854,22 @@ struct StopDetailSheet: View {
                 addressRow
                 ratingsRow
                 HalalBadge(level: restaurant.halalCertificationLevel)
+
+                if restaurant.halalCertificationLevel == .partiallyHalal,
+                   let desc = restaurant.halalDescription, !desc.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.subheadline)
+                        Text(desc)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
 
                 if let travel {
                     travelSection(travel)

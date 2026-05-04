@@ -368,6 +368,7 @@ enum LocalItineraryGenerator {
             reviewCount: 0,
             phoneNumber: nil,
             websiteURL: nil,
+            halalDescription: nil,
             photoURLs: [],
             businessHours: []
         )
@@ -427,6 +428,7 @@ enum LocalItineraryGenerator {
                     reviewCount: 0,
                     phoneNumber: item.phoneNumber,
                     websiteURL: item.url?.absoluteString,
+                    halalDescription: nil,
                     photoURLs: [],
                     businessHours: []
                 ))
@@ -476,12 +478,13 @@ extension ZabihahRestaurant {
             address: address,
             latitude: latitude,
             longitude: longitude,
-            halalCertificationLevel: .halal,
+            halalCertificationLevel: halalLevel,
             cuisineType: cuisineType,
             rating: rating ?? 0.0,
             reviewCount: reviewCount,
             phoneNumber: nil,
             websiteURL: "https://www.zabihah.com",
+            halalDescription: halalDescription,
             photoURLs: photoURLs,
             businessHours: businessHours
         )

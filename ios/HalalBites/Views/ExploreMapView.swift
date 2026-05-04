@@ -1309,6 +1309,7 @@ struct ZabihahRestaurantSheet: View {
             reviewCount: restaurant.reviewCount,
             phoneNumber: nil,
             websiteURL: nil,
+            halalDescription: restaurant.halalDescription,
             photoURLs: restaurant.photoURLs,
             businessHours: restaurant.businessHours
         )
@@ -1642,6 +1643,7 @@ struct AddToItinerarySheet: View {
             reviewCount: restaurant.reviewCount,
             phoneNumber: nil,
             websiteURL: nil,
+            halalDescription: restaurant.halalDescription,
             photoURLs: restaurant.photoURLs,
             businessHours: restaurant.businessHours
         )
@@ -1800,6 +1802,7 @@ struct SwapInItinerarySheet: View {
             reviewCount: restaurant.reviewCount,
             phoneNumber: nil,
             websiteURL: nil,
+            halalDescription: restaurant.halalDescription,
             photoURLs: restaurant.photoURLs,
             businessHours: restaurant.businessHours
         )
