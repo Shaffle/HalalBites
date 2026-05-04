@@ -94,12 +94,23 @@ enum ActivityType: String, CaseIterable, Identifiable {
 
     var searchQuery: String {
         switch self {
-        case .parks: return "parks"
+        case .parks: return "park"
         case .museums: return "museum"
         case .shopping: return "shopping mall"
         case .entertainment: return "entertainment"
         case .sports: return "sports recreation"
-        case .nightlife: return "nightlife lounge"
+        case .nightlife: return "nightlife"
+        }
+    }
+
+    var poiCategories: [MKPointOfInterestCategory] {
+        switch self {
+        case .parks: return [.park, .nationalPark, .beach, .campground, .hiking]
+        case .museums: return [.museum]
+        case .shopping: return [.store]
+        case .entertainment: return [.theater, .movieTheater, .amusementPark, .musicVenue, .aquarium, .zoo]
+        case .sports: return [.stadium, .golf, .fitnessCenter, .baseball, .basketball, .soccer, .tennis]
+        case .nightlife: return [.nightlife]
         }
     }
 }
@@ -125,11 +136,21 @@ enum LandmarkType: String, CaseIterable, Identifiable {
 
     var searchQuery: String {
         switch self {
-        case .historical: return "historical site"
+        case .historical: return "historical landmark"
         case .scenic: return "scenic viewpoint"
-        case .monuments: return "monument memorial"
-        case .architecture: return "notable architecture"
-        case .culturalCenters: return "cultural center"
+        case .monuments: return "monument"
+        case .architecture: return "famous landmark"
+        case .culturalCenters: return "cultural center arts"
+        }
+    }
+
+    var poiCategories: [MKPointOfInterestCategory] {
+        switch self {
+        case .historical: return [.landmark, .castle, .fortress, .nationalMonument, .museum]
+        case .scenic: return [.park, .nationalPark, .beach, .landmark]
+        case .monuments: return [.nationalMonument, .landmark, .fortress]
+        case .architecture: return [.landmark, .castle, .fortress, .museum]
+        case .culturalCenters: return [.museum, .theater, .musicVenue, .conventionCenter]
         }
     }
 }
@@ -574,7 +595,7 @@ struct ExploreMapView: View {
                                     explorePlaces = []
                                 } else {
                                     selectedActivityType = type
-                                    Task { await searchPlaces(type: .activity, query: type.searchQuery) }
+                                    Task { await searchPlaces(type: .activity, query: type.searchQuery, poiCategories: type.poiCategories) }
                                 }
                             }
                         } label: {
@@ -600,7 +621,7 @@ struct ExploreMapView: View {
                                     explorePlaces = []
                                 } else {
                                     selectedLandmarkType = type
-                                    Task { await searchPlaces(type: .landmark, query: type.searchQuery) }
+                                    Task { await searchPlaces(type: .landmark, query: type.searchQuery, poiCategories: type.poiCategories) }
                                 }
                             }
                         } label: {
@@ -722,7 +743,7 @@ struct ExploreMapView: View {
         await MainActor.run { mosques = results }
     }
 
-    private func searchPlaces(type: ExplorePlace.PlaceType, query: String) async {
+    private func searchPlaces(type: ExplorePlace.PlaceType, query: String, poiCategories: [MKPointOfInterestCategory] = []) async {
         let center: CLLocationCoordinate2D
         if let loc = location.currentLocation {
             center = loc.coordinate
@@ -736,10 +757,15 @@ struct ExploreMapView: View {
             center: center,
             span: MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)
         )
+        request.resultTypes = .pointOfInterest
+        if !poiCategories.isEmpty {
+            request.pointOfInterestFilter = MKPointOfInterestFilter(including: poiCategories)
+        }
 
         guard let response = try? await MKLocalSearch(request: request).start() else { return }
         let results = response.mapItems.compactMap { item -> ExplorePlace? in
-            guard let name = item.name else { return nil }
+            guard let name = item.name,
+                  item.pointOfInterestCategory != nil else { return nil }
             let address = [
                 item.placemark.subThoroughfare,
                 item.placemark.thoroughfare,
