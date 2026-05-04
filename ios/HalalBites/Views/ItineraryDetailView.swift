@@ -104,7 +104,7 @@ struct ItineraryDetailView: View {
     @State private var isUploading = false
     @State private var shareText: String?
     @State private var shareError: String?
-    @AppStorage("profileName") private var profileName = "My Profile"
+    @AppStorage("profileName") private var profileName = ""
 
     private var currentTripDay: Int {
         let cal = Calendar.current
@@ -173,7 +173,7 @@ struct ItineraryDetailView: View {
                         shareError = nil
                         do {
                             let code = try await CloudKitShareService.upload(itinerary, profileName: profileName)
-                            shareText = ItineraryShareManager.shareText(for: code, itinerary: itinerary, profileName: profileName)
+                            shareText = ItineraryShareManager.shareText(for: code, profileName: profileName)
                             showShareSheet = true
                         } catch {
                             shareError = error.localizedDescription
