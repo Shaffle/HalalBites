@@ -54,7 +54,7 @@ enum LocalItineraryGenerator {
         let dinnerPool = pool.filter { suits(meal: .dinner, restaurant: $0) }
 
         if breakfastPool.count < days {
-            let cafeResults = await searchBreakfastSpots(near: coordinate)
+            let cafeResults = await searchBreakfastSpots(near: coordinate, zabihahRestaurants: diningOnly)
             let existing = Set(breakfastPool.map { $0.name.lowercased() })
             let extra = cafeResults.filter { !existing.contains($0.name.lowercased()) }
             breakfastPool.append(contentsOf: extra)
@@ -75,7 +75,7 @@ enum LocalItineraryGenerator {
                     if !breakfastPool.isEmpty {
                         baseMealPool = breakfastPool
                     } else {
-                        let cafes = await searchBreakfastSpots(near: coordinate)
+                        let cafes = await searchBreakfastSpots(near: coordinate, zabihahRestaurants: diningOnly)
                         baseMealPool = cafes.isEmpty
                             ? [makePlaceholderCafe(near: coordinate)]
                             : cafes
@@ -374,9 +374,9 @@ enum LocalItineraryGenerator {
         )
     }
 
-    private static func searchBreakfastSpots(near coordinate: CLLocationCoordinate2D) async -> [Restaurant] {
-        let queries = ["halal breakfast", "halal cafe", "vegetarian breakfast",
-                       "vegetarian cafe", "coffee shop", "bakery", "breakfast restaurant"]
+    private static func searchBreakfastSpots(near coordinate: CLLocationCoordinate2D, zabihahRestaurants: [ZabihahRestaurant] = []) async -> [Restaurant] {
+        let queries = ["halal breakfast", "halal cafe", "halal bakery",
+                       "breakfast restaurant", "coffee shop", "bakery"]
         let region = MKCoordinateRegion(
             center: coordinate,
             latitudinalMeters: 8000,
@@ -400,14 +400,28 @@ enum LocalItineraryGenerator {
                 if excludedChains.contains(where: { nameLower.contains($0) }) { continue }
                 seenNames.insert(nameLower)
 
+                let itemCoord = item.placemark.coordinate
+                let zabihahMatch = zabihahRestaurants.first { zab in
+                    let nameSimilar = zab.name.lowercased().contains(nameLower) || nameLower.contains(zab.name.lowercased())
+                    let dist = CLLocation(latitude: itemCoord.latitude, longitude: itemCoord.longitude)
+                        .distance(from: CLLocation(latitude: zab.latitude, longitude: zab.longitude))
+                    return nameSimilar || dist < 100
+                }
+
                 let level: HalalLevel
-                let categories = item.pointOfInterestCategory?.rawValue.lowercased() ?? ""
-                if nameLower.contains("halal") {
-                    level = .halal
-                } else if nameLower.contains("vegan") || categories.contains("vegan") {
+                let halalDesc: String?
+                if let match = zabihahMatch {
+                    level = match.halalLevel
+                    halalDesc = match.halalDescription
+                } else if nameLower.contains("vegan") {
                     level = .vegan
-                } else {
+                    halalDesc = nil
+                } else if nameLower.contains("vegetarian") {
                     level = .vegetarian
+                    halalDesc = nil
+                } else {
+                    level = .halal
+                    halalDesc = nil
                 }
 
                 let address = [
@@ -420,17 +434,17 @@ enum LocalItineraryGenerator {
                     id: UUID(),
                     name: name,
                     address: address.isEmpty ? "Address unavailable" : address,
-                    latitude: item.placemark.coordinate.latitude,
-                    longitude: item.placemark.coordinate.longitude,
+                    latitude: itemCoord.latitude,
+                    longitude: itemCoord.longitude,
                     halalCertificationLevel: level,
-                    cuisineType: "Cafe",
-                    rating: 0,
-                    reviewCount: 0,
+                    cuisineType: zabihahMatch?.cuisineType ?? "Cafe",
+                    rating: zabihahMatch?.rating ?? 0,
+                    reviewCount: zabihahMatch?.reviewCount ?? 0,
                     phoneNumber: item.phoneNumber,
                     websiteURL: item.url?.absoluteString,
-                    halalDescription: nil,
-                    photoURLs: [],
-                    businessHours: []
+                    halalDescription: halalDesc,
+                    photoURLs: zabihahMatch?.photoURLs ?? [],
+                    businessHours: zabihahMatch?.businessHours ?? []
                 ))
 
                 if results.count >= 10 { return results }

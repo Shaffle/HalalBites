@@ -549,15 +549,22 @@ struct MealStopCard: View {
                     HalalBadge(level: stop.restaurant.halalCertificationLevel)
                 }
 
-                if stop.restaurant.halalCertificationLevel == .partiallyHalal,
-                   let desc = stop.restaurant.halalDescription, !desc.isEmpty {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
+                if stop.restaurant.halalCertificationLevel == .partiallyHalal {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                                .font(.caption2)
+                            if let desc = stop.restaurant.halalDescription, !desc.isEmpty {
+                                Text(desc)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Text("We still recommend calling in advance to confirm!")
+                            .font(.caption2)
+                            .italic()
                             .foregroundStyle(.orange)
-                            .font(.caption2)
-                        Text(desc)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
                     }
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -597,17 +604,15 @@ struct MealStopCard: View {
                     } label: {
                         Label("Directions", systemImage: "map.fill")
                             .font(.caption2.bold())
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                     .tint(.teal)
 
                     Button { onDetails() } label: {
-                        Label("More Details", systemImage: "info.circle.fill")
+                        Label("Details", systemImage: "info.circle.fill")
                             .font(.caption2.bold())
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                     .tint(.orange)
 
                     if let onSwap {
@@ -841,8 +846,6 @@ struct StopDetailSheet: View {
     @State private var phoneNumber: String?
     @State private var loadingPhone = true
     @State private var travel: TravelInfo?
-    @State private var menuURL: URL?
-    @State private var loadingMenu = true
     @State private var showMenuSheet = false
 
     private var restaurant: Restaurant { stop.restaurant }
@@ -855,15 +858,22 @@ struct StopDetailSheet: View {
                 ratingsRow
                 HalalBadge(level: restaurant.halalCertificationLevel)
 
-                if restaurant.halalCertificationLevel == .partiallyHalal,
-                   let desc = restaurant.halalDescription, !desc.isEmpty {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
+                if restaurant.halalCertificationLevel == .partiallyHalal {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                                .font(.subheadline)
+                            if let desc = restaurant.halalDescription, !desc.isEmpty {
+                                Text(desc)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Text("We still recommend calling in advance to confirm!")
+                            .font(.caption)
+                            .italic()
                             .foregroundStyle(.orange)
-                            .font(.subheadline)
-                        Text(desc)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
                     }
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -897,27 +907,18 @@ struct StopDetailSheet: View {
         }
         .sheet(isPresented: $showMenuSheet) {
             NavigationStack {
-                Group {
-                    if loadingMenu {
-                        ProgressView("Loading menu…")
-                    } else if let url = menuURL {
-                        MenuWebView(url: url)
-                            .ignoresSafeArea(edges: .bottom)
-                    } else {
-                        let query = "\(restaurant.name) \(restaurant.address) menu"
-                            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                        if let url = URL(string: "https://www.yelp.com/search?find_desc=\(query)") {
-                            MenuWebView(url: url)
-                                .ignoresSafeArea(edges: .bottom)
+                let query = "\(restaurant.name) \(restaurant.cuisineType) menu"
+                    .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                if let url = URL(string: "https://www.google.com/search?q=\(query)") {
+                    MenuWebView(url: url)
+                        .ignoresSafeArea(edges: .bottom)
+                        .navigationTitle("Menu")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") { showMenuSheet = false }
+                            }
                         }
-                    }
-                }
-                .navigationTitle("Menu")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") { showMenuSheet = false }
-                    }
                 }
             }
         }
@@ -936,15 +937,10 @@ struct StopDetailSheet: View {
         let response = try? await search.start()
         let item = response?.mapItems.first
         let phone = item?.phoneNumber
-        let website = item?.url
 
         await MainActor.run {
             phoneNumber = phone
             loadingPhone = false
-            if let website, website.host() != nil {
-                menuURL = website
-            }
-            loadingMenu = false
         }
     }
 
@@ -1039,15 +1035,6 @@ struct StopDetailSheet: View {
                 }
             }
 
-            if restaurant.reviewCount > 0 {
-                HStack(spacing: 4) {
-                    Image(systemName: "text.bubble")
-                        .foregroundStyle(.secondary)
-                    Text("\(restaurant.reviewCount) reviews")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
         }
     }
 
@@ -1139,69 +1126,67 @@ struct StopDetailSheet: View {
     }
 
     private var actionButtons: some View {
-        VStack(spacing: 10) {
-            Button {
-                let placemark = MKPlacemark(coordinate: restaurant.coordinate)
-                let mapItem = MKMapItem(placemark: placemark)
-                mapItem.name = restaurant.name
-                mapItem.openInMaps(launchOptions: [
-                    MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
-                ])
-            } label: {
-                Label("Directions", systemImage: "map.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.teal)
-
-            if let phone = phoneNumber {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
                 Button {
-                    let digits = phone.filter { $0.isNumber || $0 == "+" }
-                    if let url = URL(string: "tel:\(digits)") {
-                        UIApplication.shared.open(url)
+                    let placemark = MKPlacemark(coordinate: restaurant.coordinate)
+                    let mapItem = MKMapItem(placemark: placemark)
+                    mapItem.name = restaurant.name
+                    mapItem.openInMaps(launchOptions: [
+                        MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                    ])
+                } label: {
+                    Label("Directions", systemImage: "map.fill")
+                        .font(.subheadline)
+                }
+                .buttonStyle(.bordered)
+                .tint(.teal)
+
+                if let phone = phoneNumber {
+                    Button {
+                        let digits = phone.filter { $0.isNumber || $0 == "+" }
+                        if let url = URL(string: "tel:\(digits)") {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        Label("Call", systemImage: "phone.fill")
+                            .font(.subheadline)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.green)
+                } else if loadingPhone {
+                    ProgressView()
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    showMenuSheet = true
+                } label: {
+                    Label("View Menu", systemImage: "menucard.fill")
+                        .font(.subheadline)
+                }
+                .buttonStyle(.bordered)
+                .tint(.orange)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        if favouriteRestaurantIDs.contains(restaurant.id) {
+                            favouriteRestaurantIDs.remove(restaurant.id)
+                        } else {
+                            favouriteRestaurantIDs.insert(restaurant.id)
+                        }
                     }
                 } label: {
-                    Label("Call \(phone)", systemImage: "phone.fill")
-                        .frame(maxWidth: .infinity)
+                    Label(
+                        favouriteRestaurantIDs.contains(restaurant.id) ? "Favourited" : "Favourite",
+                        systemImage: favouriteRestaurantIDs.contains(restaurant.id) ? "heart.fill" : "heart"
+                    )
+                    .font(.subheadline)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-            } else if loadingPhone {
-                HStack {
-                    ProgressView()
-                    Text("Looking up phone number…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 6)
-                }
+                .buttonStyle(.bordered)
+                .tint(.pink)
             }
-
-            Button {
-                showMenuSheet = true
-            } label: {
-                Label("View Menu", systemImage: "menucard.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.orange)
-
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    if favouriteRestaurantIDs.contains(restaurant.id) {
-                        favouriteRestaurantIDs.remove(restaurant.id)
-                    } else {
-                        favouriteRestaurantIDs.insert(restaurant.id)
-                    }
-                }
-            } label: {
-                Label(
-                    favouriteRestaurantIDs.contains(restaurant.id) ? "Favourited" : "Add to Favourites",
-                    systemImage: favouriteRestaurantIDs.contains(restaurant.id) ? "heart.fill" : "heart"
-                )
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.pink)
         }
     }
 }
