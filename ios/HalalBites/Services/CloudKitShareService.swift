@@ -17,10 +17,10 @@ enum CloudKitShareService {
 
             let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(code).json")
             try jsonData.write(to: tempURL)
-            record["itineraryFile"] = CKAsset(fileURL: tempURL)
+            record["file"] = CKAsset(fileURL: tempURL)
             record["city"] = itinerary.city as CKRecordValue
             record["country"] = itinerary.country as CKRecordValue
-            record["sharedBy"] = profileName as CKRecordValue
+            record["sender"] = profileName as CKRecordValue
 
             do {
                 try await publicDB.save(record)
@@ -41,7 +41,7 @@ enum CloudKitShareService {
         let recordID = CKRecord.ID(recordName: code)
         let record = try await publicDB.record(for: recordID)
 
-        guard let asset = record["itineraryFile"] as? CKAsset,
+        guard let asset = record["file"] as? CKAsset,
               let fileURL = asset.fileURL,
               let data = try? Data(contentsOf: fileURL) else {
             throw ShareError.invalidData
