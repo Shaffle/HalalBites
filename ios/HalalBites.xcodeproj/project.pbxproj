@@ -17,6 +17,7 @@
 		3096AFCE2FA81B2900ED2EBA /* ItineraryShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFCD2FA81B2900ED2EBA /* ItineraryShareManager.swift */; };
 		3096AFD12FA824ED00ED2EBA /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFD02FA824ED00ED2EBA /* OnboardingView.swift */; };
 		3096AFD32FA82D3400ED2EBA /* CloudKitShareService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFD22FA82D3400ED2EBA /* CloudKitShareService.swift */; };
+		3096AFD62FA920E700ED2EBA /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFD52FA920E700ED2EBA /* NotificationService.swift */; };
 		30FDCD922FA5DA04001CD543 /* SplashScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */; };
 		30FDCD942FA5DAC6001CD543 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 30FDCD932FA5DAC6001CD543 /* Assets.xcassets */; };
 		30FDCD962FA5E475001CD543 /* SideMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD952FA5E475001CD543 /* SideMenuView.swift */; };
@@ -47,6 +48,7 @@
 		3096AFD02FA824ED00ED2EBA /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		3096AFD22FA82D3400ED2EBA /* CloudKitShareService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitShareService.swift; sourceTree = "<group>"; };
 		3096AFD42FA82D8D00ED2EBA /* HalalBites.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HalalBites.entitlements; sourceTree = "<group>"; };
+		3096AFD52FA920E700ED2EBA /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreenView.swift; sourceTree = "<group>"; };
 		30FDCD932FA5DAC6001CD543 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		30FDCD952FA5E475001CD543 /* SideMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideMenuView.swift; sourceTree = "<group>"; };
@@ -127,6 +129,7 @@
 				3096AFCB2FA8023700ED2EBA /* PersistenceManager.swift */,
 				3096AFCD2FA81B2900ED2EBA /* ItineraryShareManager.swift */,
 				3096AFD22FA82D3400ED2EBA /* CloudKitShareService.swift */,
+				3096AFD52FA920E700ED2EBA /* NotificationService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -245,6 +248,7 @@
 				AA000009 /* ExploreMapView.swift in Sources */,
 				3096AFCC2FA8023700ED2EBA /* PersistenceManager.swift in Sources */,
 				3021692E2FA5C48A009731F9 /* UserReview.swift in Sources */,
+				3096AFD62FA920E700ED2EBA /* NotificationService.swift in Sources */,
 				AA000010 /* ItineraryGeneratorView.swift in Sources */,
 				AA000011 /* ZabihahService.swift in Sources */,
 				AA000012 /* LocalItineraryGenerator.swift in Sources */,

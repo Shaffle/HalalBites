@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var archivedItineraries: [Itinerary] = []
     @State private var recentlyDeleted: [Itinerary] = []
     @Binding var pendingItinerary: Itinerary?
+    @EnvironmentObject var notificationService: NotificationService
 
     var body: some View {
         mainContent
@@ -25,6 +26,10 @@ struct ContentView: View {
             }
             .modifier(PersistItineraries(itineraries: $itineraries, archivedItineraries: $archivedItineraries, recentlyDeleted: $recentlyDeleted))
             .modifier(PersistFavourites(favouriteIDs: $favouriteIDs, favouriteRestaurantIDs: $favouriteRestaurantIDs, exploreFavouriteRestaurants: $exploreFavouriteRestaurants))
+            .onChange(of: itineraries) { _, newValue in
+                notificationService.updateMonitoredStops(from: newValue)
+                notificationService.scheduleDailyReminders(for: newValue)
+            }
     }
 
     private var mainContent: some View {
