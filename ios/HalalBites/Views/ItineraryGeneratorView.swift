@@ -97,17 +97,6 @@ struct ItineraryGeneratorView: View {
                     }
                 }
 
-                if isLoading {
-                    Section {
-                        HStack {
-                            ProgressView()
-                            Text("Finding halal restaurants…")
-                                .foregroundStyle(.secondary)
-                                .padding(.leading, 8)
-                        }
-                    }
-                }
-
                 if let error = errorMessage {
                     Section {
                         Text(error).foregroundStyle(.red)
@@ -119,19 +108,14 @@ struct ItineraryGeneratorView: View {
                         Task { await generate() }
                     } label: {
                         HStack(spacing: 8) {
-                            if isLoading {
-                                ProgressView()
-                                    .tint(.white)
-                            } else {
-                                Text("Generate")
-                                Image(systemName: "sparkles")
-                                Text("Itinerary")
-                            }
+                            Text("Generate")
+                            Image(systemName: "sparkles")
+                            Text("Itinerary")
                         }
                         .font(.title3.bold())
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(canGenerate && !isLoading ? Color.teal : Color.gray.opacity(0.6))
+                        .background(canGenerate ? Color.teal : Color.gray.opacity(0.6))
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
@@ -140,6 +124,13 @@ struct ItineraryGeneratorView: View {
                     .listRowBackground(Color.clear)
                 }
             }
+            .overlay {
+                if isLoading {
+                    LoadingOverlay()
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: isLoading)
             .navigationTitle("Plan a Trip")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -212,3 +203,53 @@ struct ItineraryGeneratorView: View {
     }
 }
 
+private struct LoadingOverlay: View {
+    @State private var pulse = false
+    @State private var rotation = 0.0
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.teal.opacity(0.3), lineWidth: 4)
+                        .frame(width: 60, height: 60)
+
+                    Circle()
+                        .trim(from: 0, to: 0.3)
+                        .stroke(Color.teal, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .frame(width: 60, height: 60)
+                        .rotationEffect(.degrees(rotation))
+
+                    Image(systemName: "fork.knife")
+                        .font(.title2)
+                        .foregroundStyle(.teal)
+                        .scaleEffect(pulse ? 1.15 : 0.95)
+                }
+
+                Text("Building your favorite trip")
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
+
+                Text("Finding the best halal spots...")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            .padding(40)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .scaleEffect(pulse ? 1.02 : 0.98)
+        }
+        .onAppear {
+            withAnimation(.linear(duration: 1.0).repeatForever(autoreverses: false)) {
+                rotation = 360
+            }
+            withAnimation(.easeInOut(duration: 1.2).repeatForever()) {
+                pulse = true
+            }
+        }
+    }
+}
