@@ -102,6 +102,7 @@ struct ItineraryDetailView: View {
     @State private var lastPromptedDay = 0
     @State private var activitiesByDay: [UUID: [NearbyActivity]] = [:]
     @State private var showShareSheet = false
+    @AppStorage("profileName") private var profileName = "My Profile"
 
     private var currentTripDay: Int {
         let cal = Calendar.current
@@ -173,7 +174,7 @@ struct ItineraryDetailView: View {
         }
         .sheet(isPresented: $showShareSheet) {
             if let url = ItineraryShareManager.shareURL(for: itinerary) {
-                ShareSheet(items: [ItineraryShareItem(itinerary: itinerary, url: url)])
+                ShareSheet(items: [ItineraryShareItem(itinerary: itinerary, url: url, profileName: profileName)])
             }
         }
         .task {
@@ -1351,10 +1352,12 @@ struct ShareSheet: UIViewControllerRepresentable {
 class ItineraryShareItem: NSObject, UIActivityItemSource {
     let itinerary: Itinerary
     let url: URL
+    let profileName: String
 
-    init(itinerary: Itinerary, url: URL) {
+    init(itinerary: Itinerary, url: URL, profileName: String) {
         self.itinerary = itinerary
         self.url = url
+        self.profileName = profileName
     }
 
     func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
@@ -1366,12 +1369,12 @@ class ItineraryShareItem: NSObject, UIActivityItemSource {
     }
 
     func activityViewController(_ activityViewController: UIActivityViewController, subjectForActivityType activityType: UIActivity.ActivityType?) -> String {
-        "\(itinerary.city), \(itinerary.country) — \(itinerary.durationDays) Day Itinerary"
+        "\(profileName) shared their list with you!"
     }
 
     func activityViewControllerLinkMetadata(_ activityViewController: UIActivityViewController) -> LPLinkMetadata? {
         let metadata = LPLinkMetadata()
-        metadata.title = "\(itinerary.city), \(itinerary.country)"
+        metadata.title = "\(profileName) shared their list with you!"
         metadata.originalURL = url
 
         if let appIcon = Bundle.main.icon {
