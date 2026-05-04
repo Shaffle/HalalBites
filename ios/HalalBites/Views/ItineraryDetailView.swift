@@ -172,8 +172,8 @@ struct ItineraryDetailView: View {
             }
         }
         .sheet(isPresented: $showShareSheet) {
-            if let text = ItineraryShareManager.shareText(for: itinerary, profileName: profileName) {
-                ShareSheet(items: [text])
+            if let items = ItineraryShareManager.shareItems(for: itinerary, profileName: profileName) {
+                ShareSheet(items: items)
             }
         }
         .task {
