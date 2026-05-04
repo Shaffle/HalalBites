@@ -2,6 +2,7 @@ import SwiftUI
 import MapKit
 import CoreLocation
 import WebKit
+import LinkPresentation
 
 // MARK: - Recommendation System
 
@@ -100,6 +101,7 @@ struct ItineraryDetailView: View {
     @State private var showDayFeedback = false
     @State private var lastPromptedDay = 0
     @State private var activitiesByDay: [UUID: [NearbyActivity]] = [:]
+    @State private var showShareSheet = false
 
     private var currentTripDay: Int {
         let cal = Calendar.current
@@ -160,6 +162,20 @@ struct ItineraryDetailView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle("\(itinerary.city) · \(itinerary.durationDays)d")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showShareSheet = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+            }
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let url = ItineraryShareManager.shareURL(for: itinerary) {
+                ShareSheet(items: [ItineraryShareItem(itinerary: itinerary, url: url)])
+            }
+        }
         .task {
             activitiesByDay = await ActivitySearch.searchAllDays(for: itinerary.days)
         }
@@ -1318,4 +1334,69 @@ struct MenuWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {}
+}
+
+// MARK: - Share Sheet
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+class ItineraryShareItem: NSObject, UIActivityItemSource {
+    let itinerary: Itinerary
+    let url: URL
+
+    init(itinerary: Itinerary, url: URL) {
+        self.itinerary = itinerary
+        self.url = url
+    }
+
+    func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
+        url
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, itemForActivityType activityType: UIActivity.ActivityType?) -> Any? {
+        url
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, subjectForActivityType activityType: UIActivity.ActivityType?) -> String {
+        "\(itinerary.city), \(itinerary.country) — \(itinerary.durationDays) Day Itinerary"
+    }
+
+    func activityViewControllerLinkMetadata(_ activityViewController: UIActivityViewController) -> LPLinkMetadata? {
+        let metadata = LPLinkMetadata()
+        metadata.title = "\(itinerary.city), \(itinerary.country)"
+        metadata.originalURL = url
+
+        if let appIcon = Bundle.main.icon {
+            metadata.iconProvider = NSItemProvider(object: appIcon)
+        } else if let logo = UIImage(named: "SafaLogo") {
+            metadata.iconProvider = NSItemProvider(object: logo)
+        }
+
+        return metadata
+    }
+}
+
+extension Bundle {
+    var icon: UIImage? {
+        if let icons = infoDictionary?["CFBundleIcons"] as? [String: Any],
+           let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+           let files = primary["CFBundleIconFiles"] as? [String],
+           let name = files.last,
+           let image = UIImage(named: name) {
+            return image
+        }
+        if let iconName = infoDictionary?["CFBundleIconName"] as? String,
+           let image = UIImage(named: iconName) {
+            return image
+        }
+        return UIImage(named: "AppIcon")
+    }
 }

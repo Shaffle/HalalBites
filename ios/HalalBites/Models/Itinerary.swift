@@ -9,6 +9,19 @@ struct Itinerary: Identifiable, Codable, Equatable {
     let startDate: Date
     var days: [ItineraryDay]
     var isSaved: Bool
+    var isShared: Bool
+
+    init(id: UUID = UUID(), city: String, country: String, durationDays: Int, createdAt: Date, startDate: Date, days: [ItineraryDay], isSaved: Bool, isShared: Bool = false) {
+        self.id = id
+        self.city = city
+        self.country = country
+        self.durationDays = durationDays
+        self.createdAt = createdAt
+        self.startDate = startDate
+        self.days = days
+        self.isSaved = isSaved
+        self.isShared = isShared
+    }
 
     var endDate: Date {
         Calendar.current.date(byAdding: .day, value: durationDays, to: startDate) ?? startDate

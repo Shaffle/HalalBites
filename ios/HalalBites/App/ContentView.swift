@@ -14,6 +14,11 @@ struct ContentView: View {
         mainContent
             .preferredColorScheme(lightsOn ? .light : .dark)
             .onAppear(perform: loadData)
+            .onOpenURL { url in
+                if let shared = ItineraryShareManager.itinerary(from: url) {
+                    itineraries.insert(shared, at: 0)
+                }
+            }
             .modifier(PersistItineraries(itineraries: $itineraries, archivedItineraries: $archivedItineraries, recentlyDeleted: $recentlyDeleted))
             .modifier(PersistFavourites(favouriteIDs: $favouriteIDs, favouriteRestaurantIDs: $favouriteRestaurantIDs, exploreFavouriteRestaurants: $exploreFavouriteRestaurants))
     }

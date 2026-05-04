@@ -14,6 +14,7 @@
 		3021692E2FA5C48A009731F9 /* UserReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3021692D2FA5C48A009731F9 /* UserReview.swift */; };
 		302169302FA5C4B3009731F9 /* YelpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3021692F2FA5C4B3009731F9 /* YelpService.swift */; };
 		3096AFCC2FA8023700ED2EBA /* PersistenceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFCB2FA8023700ED2EBA /* PersistenceManager.swift */; };
+		3096AFCE2FA81B2900ED2EBA /* ItineraryShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFCD2FA81B2900ED2EBA /* ItineraryShareManager.swift */; };
 		30FDCD922FA5DA04001CD543 /* SplashScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */; };
 		30FDCD942FA5DAC6001CD543 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 30FDCD932FA5DAC6001CD543 /* Assets.xcassets */; };
 		30FDCD962FA5E475001CD543 /* SideMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD952FA5E475001CD543 /* SideMenuView.swift */; };
@@ -39,6 +40,8 @@
 		3021692D2FA5C48A009731F9 /* UserReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserReview.swift; sourceTree = "<group>"; };
 		3021692F2FA5C4B3009731F9 /* YelpService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YelpService.swift; sourceTree = "<group>"; };
 		3096AFCB2FA8023700ED2EBA /* PersistenceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceManager.swift; sourceTree = "<group>"; };
+		3096AFCD2FA81B2900ED2EBA /* ItineraryShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItineraryShareManager.swift; sourceTree = "<group>"; };
+		3096AFCF2FA81BE200ED2EBA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreenView.swift; sourceTree = "<group>"; };
 		30FDCD932FA5DAC6001CD543 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		30FDCD952FA5E475001CD543 /* SideMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideMenuView.swift; sourceTree = "<group>"; };
@@ -79,6 +82,7 @@
 		AE000001 /* HalalBites */ = {
 			isa = PBXGroup;
 			children = (
+				3096AFCF2FA81BE200ED2EBA /* Info.plist */,
 				30FDCD932FA5DAC6001CD543 /* Assets.xcassets */,
 				AE000002 /* App */,
 				AE000003 /* Models */,
@@ -115,6 +119,7 @@
 				AB000011 /* ZabihahService.swift */,
 				AB000012 /* LocalItineraryGenerator.swift */,
 				3096AFCB2FA8023700ED2EBA /* PersistenceManager.swift */,
+				3096AFCD2FA81B2900ED2EBA /* ItineraryShareManager.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -235,6 +240,7 @@
 				AA000011 /* ZabihahService.swift in Sources */,
 				AA000012 /* LocalItineraryGenerator.swift in Sources */,
 				30FDCD982FA5E47C001CD543 /* ArchiveView.swift in Sources */,
+				3096AFCE2FA81B2900ED2EBA /* ItineraryShareManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -370,9 +376,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 7WZST775JM;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HalalBites/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Safa Halal";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "HalalBites needs your location to find nearby halal restaurants.";
@@ -381,7 +388,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDarkContent;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -402,9 +409,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 7WZST775JM;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HalalBites/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Safa Halal";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "HalalBites needs your location to find nearby halal restaurants.";
@@ -413,7 +421,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDarkContent;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
