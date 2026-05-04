@@ -16,6 +16,7 @@
 		3096AFCC2FA8023700ED2EBA /* PersistenceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFCB2FA8023700ED2EBA /* PersistenceManager.swift */; };
 		3096AFCE2FA81B2900ED2EBA /* ItineraryShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFCD2FA81B2900ED2EBA /* ItineraryShareManager.swift */; };
 		3096AFD12FA824ED00ED2EBA /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFD02FA824ED00ED2EBA /* OnboardingView.swift */; };
+		3096AFD32FA82D3400ED2EBA /* CloudKitShareService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFD22FA82D3400ED2EBA /* CloudKitShareService.swift */; };
 		30FDCD922FA5DA04001CD543 /* SplashScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */; };
 		30FDCD942FA5DAC6001CD543 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 30FDCD932FA5DAC6001CD543 /* Assets.xcassets */; };
 		30FDCD962FA5E475001CD543 /* SideMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD952FA5E475001CD543 /* SideMenuView.swift */; };
@@ -44,6 +45,8 @@
 		3096AFCD2FA81B2900ED2EBA /* ItineraryShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItineraryShareManager.swift; sourceTree = "<group>"; };
 		3096AFCF2FA81BE200ED2EBA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3096AFD02FA824ED00ED2EBA /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		3096AFD22FA82D3400ED2EBA /* CloudKitShareService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitShareService.swift; sourceTree = "<group>"; };
+		3096AFD42FA82D8D00ED2EBA /* HalalBites.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HalalBites.entitlements; sourceTree = "<group>"; };
 		30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreenView.swift; sourceTree = "<group>"; };
 		30FDCD932FA5DAC6001CD543 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		30FDCD952FA5E475001CD543 /* SideMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideMenuView.swift; sourceTree = "<group>"; };
@@ -84,6 +87,7 @@
 		AE000001 /* HalalBites */ = {
 			isa = PBXGroup;
 			children = (
+				3096AFD42FA82D8D00ED2EBA /* HalalBites.entitlements */,
 				3096AFCF2FA81BE200ED2EBA /* Info.plist */,
 				30FDCD932FA5DAC6001CD543 /* Assets.xcassets */,
 				AE000002 /* App */,
@@ -122,6 +126,7 @@
 				AB000012 /* LocalItineraryGenerator.swift */,
 				3096AFCB2FA8023700ED2EBA /* PersistenceManager.swift */,
 				3096AFCD2FA81B2900ED2EBA /* ItineraryShareManager.swift */,
+				3096AFD22FA82D3400ED2EBA /* CloudKitShareService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -230,6 +235,7 @@
 				30FDCD922FA5DA04001CD543 /* SplashScreenView.swift in Sources */,
 				AA000003 /* Restaurant.swift in Sources */,
 				AA000004 /* Itinerary.swift in Sources */,
+				3096AFD32FA82D3400ED2EBA /* CloudKitShareService.swift in Sources */,
 				302117102FA5F69600D9E517 /* ContentView.swift in Sources */,
 				AA000006 /* LocationService.swift in Sources */,
 				AA000007 /* ItineraryListView.swift in Sources */,
@@ -379,8 +385,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = HalalBites/HalalBites.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = 7WZST775JM;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = HalalBites/Info.plist;
@@ -412,8 +419,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = HalalBites/HalalBites.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = 7WZST775JM;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = HalalBites/Info.plist;

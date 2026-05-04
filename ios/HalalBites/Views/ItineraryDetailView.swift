@@ -101,6 +101,9 @@ struct ItineraryDetailView: View {
     @State private var lastPromptedDay = 0
     @State private var activitiesByDay: [UUID: [NearbyActivity]] = [:]
     @State private var showShareSheet = false
+    @State private var isUploading = false
+    @State private var shareText: String?
+    @State private var shareError: String?
     @AppStorage("profileName") private var profileName = "My Profile"
 
     private var currentTripDay: Int {
@@ -165,16 +168,37 @@ struct ItineraryDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    showShareSheet = true
+                    Task {
+                        isUploading = true
+                        shareError = nil
+                        do {
+                            let code = try await CloudKitShareService.upload(itinerary, profileName: profileName)
+                            shareText = ItineraryShareManager.shareText(for: code, itinerary: itinerary, profileName: profileName)
+                            showShareSheet = true
+                        } catch {
+                            shareError = "Could not share. Check your internet connection and iCloud sign-in."
+                        }
+                        isUploading = false
+                    }
                 } label: {
-                    Image(systemName: "square.and.arrow.up")
+                    if isUploading {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                    }
                 }
+                .disabled(isUploading)
             }
         }
         .sheet(isPresented: $showShareSheet) {
-            if let items = ItineraryShareManager.shareItems(for: itinerary, profileName: profileName) {
-                ShareSheet(items: items)
+            if let text = shareText {
+                ShareSheet(items: [text])
             }
+        }
+        .alert("Share Failed", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
+            Button("OK") { shareError = nil }
+        } message: {
+            Text(shareError ?? "")
         }
         .task {
             activitiesByDay = await ActivitySearch.searchAllDays(for: itinerary.days)

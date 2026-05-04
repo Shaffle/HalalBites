@@ -13,8 +13,13 @@ struct HalalBitesApp: App {
                     locationService.requestPermission()
                 }
                 .onOpenURL { url in
-                    if let itinerary = ItineraryShareManager.itinerary(from: url) {
-                        pendingItinerary = itinerary
+                    guard let code = ItineraryShareManager.parseShareCode(from: url) else { return }
+                    Task {
+                        if let itinerary = try? await CloudKitShareService.fetch(code: code) {
+                            await MainActor.run {
+                                pendingItinerary = itinerary
+                            }
+                        }
                     }
                 }
         }
