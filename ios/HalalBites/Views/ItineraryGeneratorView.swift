@@ -7,6 +7,7 @@ struct ItineraryGeneratorView: View {
     @EnvironmentObject var location: LocationService
     @Environment(\.dismiss) private var dismiss
 
+    @State private var tripName = ""
     @State private var city = ""
     @State private var country = ""
     @State private var durationDays = 3
@@ -32,6 +33,10 @@ struct ItineraryGeneratorView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Trip Name") {
+                    TextField("e.g. Summer in Istanbul", text: $tripName)
+                }
+
                 Section("Travel Date") {
                     DatePicker("Start Date", selection: $travelDate, in: Date()..., displayedComponents: .date)
                 }
@@ -163,7 +168,7 @@ struct ItineraryGeneratorView: View {
     }
 
     private var canGenerate: Bool {
-        !city.isEmpty && !country.isEmpty
+        !tripName.trimmingCharacters(in: .whitespaces).isEmpty && !city.isEmpty && !country.isEmpty
     }
 
     private func autoFillFromLocation() async {
@@ -185,7 +190,7 @@ struct ItineraryGeneratorView: View {
             errorMessage = nil
         }
         do {
-            let itinerary = try await LocalItineraryGenerator.generate(
+            var itinerary = try await LocalItineraryGenerator.generate(
                 city: city,
                 country: country,
                 days: durationDays,
@@ -193,6 +198,7 @@ struct ItineraryGeneratorView: View {
                 budget: budgetLevel,
                 startDate: travelDate
             )
+            itinerary.tripName = tripName.isEmpty ? "\(city), \(country)" : tripName
             await MainActor.run {
                 onGenerate(itinerary)
                 dismiss()

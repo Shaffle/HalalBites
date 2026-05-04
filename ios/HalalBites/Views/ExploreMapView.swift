@@ -51,15 +51,15 @@ enum FoodType: String, CaseIterable, Identifiable {
 
     var keywords: [String] {
         switch self {
-        case .burgers: return ["burger", "burgers", "smash"]
-        case .pizza: return ["pizza", "pizzeria"]
-        case .kebabs: return ["kebab", "kabob", "kabab", "grill"]
-        case .biryani: return ["biryani", "biriyani", "pakistani", "indian", "south asian"]
-        case .shawarma: return ["shawarma", "gyro", "doner", "wrap"]
-        case .chicken: return ["chicken", "wings", "fried chicken", "poultry"]
-        case .seafood: return ["seafood", "fish", "shrimp"]
-        case .desserts: return ["dessert", "bakery", "sweets", "pastry", "cake", "ice cream"]
-        case .coffee: return ["coffee", "cafe", "café", "tea"]
+        case .burgers: return ["burger", "burgers", "smash", "american", "fast food", "diner"]
+        case .pizza: return ["pizza", "pizzeria", "italian"]
+        case .kebabs: return ["kebab", "kabob", "kabab", "grill", "turkish", "persian", "iranian"]
+        case .biryani: return ["biryani", "biriyani", "pakistani", "indian", "south asian", "bangladeshi", "desi"]
+        case .shawarma: return ["shawarma", "gyro", "doner", "wrap", "middle eastern", "arab", "lebanese", "mediterranean"]
+        case .chicken: return ["chicken", "wings", "fried chicken", "poultry", "nashville"]
+        case .seafood: return ["seafood", "fish", "shrimp", "sushi"]
+        case .desserts: return ["dessert", "bakery", "sweets", "pastry", "cake", "ice cream", "donut", "chocolate"]
+        case .coffee: return ["coffee", "cafe", "café", "tea", "espresso", "latte"]
         }
     }
 

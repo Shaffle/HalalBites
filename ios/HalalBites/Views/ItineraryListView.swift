@@ -169,7 +169,7 @@ struct ItineraryRowView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text("\(itinerary.city), \(itinerary.country)")
+                    Text(itinerary.tripName)
                         .font(.headline)
                     if itinerary.isShared {
                         Text("Shared")
@@ -181,7 +181,7 @@ struct ItineraryRowView: View {
                             .clipShape(Capsule())
                     }
                 }
-                Text("\(itinerary.durationDays) days · \(itinerary.days.flatMap(\.stops).count) stops")
+                Text("\(itinerary.city), \(itinerary.country) · \(itinerary.durationDays) days · \(itinerary.days.flatMap(\.stops).count) stops")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

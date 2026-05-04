@@ -2,6 +2,7 @@ import SwiftUI
 import MapKit
 import CoreLocation
 import WebKit
+import LinkPresentation
 
 // MARK: - Recommendation System
 
@@ -163,7 +164,7 @@ struct ItineraryDetailView: View {
         }
         .tabViewStyle(.page(indexDisplayMode: .automatic))
         .background(Color(.systemGroupedBackground))
-        .navigationTitle("\(itinerary.city) · \(itinerary.durationDays)d")
+        .navigationTitle(itinerary.tripName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -173,7 +174,7 @@ struct ItineraryDetailView: View {
                         shareError = nil
                         do {
                             let code = try await CloudKitShareService.upload(itinerary, profileName: profileName)
-                            shareText = ItineraryShareManager.shareText(for: code, profileName: profileName)
+                            shareText = ItineraryShareManager.shareText(for: code, profileName: profileName, tripName: itinerary.tripName)
                             showShareSheet = true
                         } catch {
                             shareError = error.localizedDescription
@@ -192,7 +193,7 @@ struct ItineraryDetailView: View {
         }
         .sheet(isPresented: $showShareSheet) {
             if let text = shareText {
-                ShareSheet(items: [text])
+                ShareSheet(items: [ShareItemWithPreview(text: text, title: "\(profileName) has shared \(itinerary.tripName) with you!")])
             }
         }
         .alert("Share Failed", isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })) {
@@ -1370,5 +1371,49 @@ struct ShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+class ShareItemWithPreview: NSObject, UIActivityItemSource {
+    let text: String
+    let title: String
+
+    init(text: String, title: String) {
+        self.text = text
+        self.title = title
+    }
+
+    func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
+        text
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, itemForActivityType activityType: UIActivity.ActivityType?) -> Any? {
+        text
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, subjectForActivityType activityType: UIActivity.ActivityType?) -> String {
+        title
+    }
+
+    func activityViewControllerLinkMetadata(_ activityViewController: UIActivityViewController) -> LPLinkMetadata? {
+        let metadata = LPLinkMetadata()
+        metadata.title = title
+
+        if let icon = appIcon {
+            metadata.iconProvider = NSItemProvider(object: icon)
+            metadata.imageProvider = NSItemProvider(object: icon)
+        }
+
+        return metadata
+    }
+
+    private var appIcon: UIImage? {
+        if let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+           let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+           let files = primary["CFBundleIconFiles"] as? [String],
+           let name = files.last {
+            return UIImage(named: name)
+        }
+        return UIImage(named: "AppIcon")
+    }
 }
 

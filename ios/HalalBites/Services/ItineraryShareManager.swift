@@ -3,9 +3,9 @@ import Foundation
 enum ItineraryShareManager {
     private static let scheme = "safa-halal"
 
-    static func shareText(for code: String, profileName: String) -> String {
+    static func shareText(for code: String, profileName: String, tripName: String) -> String {
         """
-        \(profileName) has shared their Safa Itinerary with you!
+        \(profileName) has shared \(tripName) with you!
 
         \(scheme)://c/\(code)
         """

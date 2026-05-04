@@ -2,6 +2,7 @@ import Foundation
 
 struct Itinerary: Identifiable, Codable, Equatable {
     let id: UUID
+    var tripName: String
     let city: String
     let country: String
     let durationDays: Int
@@ -11,8 +12,9 @@ struct Itinerary: Identifiable, Codable, Equatable {
     var isSaved: Bool
     var isShared: Bool
 
-    init(id: UUID = UUID(), city: String, country: String, durationDays: Int, createdAt: Date, startDate: Date, days: [ItineraryDay], isSaved: Bool, isShared: Bool = false) {
+    init(id: UUID = UUID(), tripName: String = "", city: String, country: String, durationDays: Int, createdAt: Date, startDate: Date, days: [ItineraryDay], isSaved: Bool, isShared: Bool = false) {
         self.id = id
+        self.tripName = tripName.isEmpty ? "\(city), \(country)" : tripName
         self.city = city
         self.country = country
         self.durationDays = durationDays
