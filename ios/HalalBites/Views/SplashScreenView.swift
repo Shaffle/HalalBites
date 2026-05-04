@@ -11,13 +11,19 @@ struct SplashScreenView: View {
     @State private var zoomScale = 1.0
     @State private var zoomOpacity = 1.0
     @State private var showContent = false
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     private let brandTeal = Color(red: 0.0, green: 0.58, blue: 0.56)
 
     var body: some View {
         ZStack {
             if showContent {
-                ContentView()
-                    .transition(.opacity)
+                if hasCompletedOnboarding {
+                    ContentView()
+                        .transition(.opacity)
+                } else {
+                    OnboardingView()
+                        .transition(.opacity)
+                }
             }
 
             if !isActive {

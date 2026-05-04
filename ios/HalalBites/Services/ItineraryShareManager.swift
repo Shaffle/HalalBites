@@ -2,22 +2,54 @@ import Foundation
 
 enum ItineraryShareManager {
     private static let scheme = "safa-halal"
+    private static let fileExtension = "safahalal"
 
-    static func shareURL(for itinerary: Itinerary) -> URL? {
+    static func shareFile(for itinerary: Itinerary) -> URL? {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         guard let json = try? encoder.encode(itinerary) else { return nil }
-        let compressed = (try? (json as NSData).compressed(using: .zlib)) as Data? ?? json
-        let base64 = compressed.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-        return URL(string: "\(scheme)://import/\(base64)")
+
+        let safe = itinerary.city.replacingOccurrences(of: " ", with: "_")
+        let fileName = "\(safe)_\(itinerary.durationDays)d.\(fileExtension)"
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        guard (try? json.write(to: tempURL)) != nil else { return nil }
+        return tempURL
     }
 
     static func itinerary(from url: URL) -> Itinerary? {
-        guard url.scheme == scheme,
-              url.host == "import",
+        if url.isFileURL || url.pathExtension == fileExtension {
+            return itineraryFromFile(url)
+        }
+        if url.scheme == scheme {
+            return itineraryFromCustomURL(url)
+        }
+        return nil
+    }
+
+    private static func itineraryFromFile(_ url: URL) -> Itinerary? {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let decoded = try? decoder.decode(Itinerary.self, from: data) else { return nil }
+
+        return Itinerary(
+            id: UUID(),
+            city: decoded.city,
+            country: decoded.country,
+            durationDays: decoded.durationDays,
+            createdAt: Date(),
+            startDate: decoded.startDate,
+            days: decoded.days,
+            isSaved: true,
+            isShared: true
+        )
+    }
+
+    private static func itineraryFromCustomURL(_ url: URL) -> Itinerary? {
+        guard url.host == "import",
               url.pathComponents.count > 1 else { return nil }
 
         var base64 = url.pathComponents[1]
@@ -30,19 +62,18 @@ enum ItineraryShareManager {
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        guard var itinerary = try? decoder.decode(Itinerary.self, from: json) else { return nil }
+        guard let decoded = try? decoder.decode(Itinerary.self, from: json) else { return nil }
 
-        itinerary = Itinerary(
+        return Itinerary(
             id: UUID(),
-            city: itinerary.city,
-            country: itinerary.country,
-            durationDays: itinerary.durationDays,
+            city: decoded.city,
+            country: decoded.country,
+            durationDays: decoded.durationDays,
             createdAt: Date(),
-            startDate: itinerary.startDate,
-            days: itinerary.days,
+            startDate: decoded.startDate,
+            days: decoded.days,
             isSaved: true,
             isShared: true
         )
-        return itinerary
     }
 }

@@ -15,6 +15,7 @@
 		302169302FA5C4B3009731F9 /* YelpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3021692F2FA5C4B3009731F9 /* YelpService.swift */; };
 		3096AFCC2FA8023700ED2EBA /* PersistenceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFCB2FA8023700ED2EBA /* PersistenceManager.swift */; };
 		3096AFCE2FA81B2900ED2EBA /* ItineraryShareManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFCD2FA81B2900ED2EBA /* ItineraryShareManager.swift */; };
+		3096AFD12FA824ED00ED2EBA /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFD02FA824ED00ED2EBA /* OnboardingView.swift */; };
 		30FDCD922FA5DA04001CD543 /* SplashScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */; };
 		30FDCD942FA5DAC6001CD543 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 30FDCD932FA5DAC6001CD543 /* Assets.xcassets */; };
 		30FDCD962FA5E475001CD543 /* SideMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD952FA5E475001CD543 /* SideMenuView.swift */; };
@@ -42,6 +43,7 @@
 		3096AFCB2FA8023700ED2EBA /* PersistenceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceManager.swift; sourceTree = "<group>"; };
 		3096AFCD2FA81B2900ED2EBA /* ItineraryShareManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItineraryShareManager.swift; sourceTree = "<group>"; };
 		3096AFCF2FA81BE200ED2EBA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		3096AFD02FA824ED00ED2EBA /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreenView.swift; sourceTree = "<group>"; };
 		30FDCD932FA5DAC6001CD543 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		30FDCD952FA5E475001CD543 /* SideMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideMenuView.swift; sourceTree = "<group>"; };
@@ -138,6 +140,7 @@
 				302117112FA5F69700D9E517 /* FavouritesView.swift */,
 				302117132FA5F69800D9E517 /* RecentView.swift */,
 				302117152FA5F69800D9E517 /* ProfileEditorView.swift */,
+				3096AFD02FA824ED00ED2EBA /* OnboardingView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -240,6 +243,7 @@
 				AA000011 /* ZabihahService.swift in Sources */,
 				AA000012 /* LocalItineraryGenerator.swift in Sources */,
 				30FDCD982FA5E47C001CD543 /* ArchiveView.swift in Sources */,
+				3096AFD12FA824ED00ED2EBA /* OnboardingView.swift in Sources */,
 				3096AFCE2FA81B2900ED2EBA /* ItineraryShareManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -376,7 +380,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = 7WZST775JM;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = HalalBites/Info.plist;
@@ -409,7 +413,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = 7WZST775JM;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = HalalBites/Info.plist;

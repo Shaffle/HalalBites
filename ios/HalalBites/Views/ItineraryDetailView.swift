@@ -173,8 +173,8 @@ struct ItineraryDetailView: View {
             }
         }
         .sheet(isPresented: $showShareSheet) {
-            if let url = ItineraryShareManager.shareURL(for: itinerary) {
-                ShareSheet(items: [ItineraryShareItem(itinerary: itinerary, url: url, profileName: profileName)])
+            if let fileURL = ItineraryShareManager.shareFile(for: itinerary) {
+                ShareSheet(items: [ItineraryShareItem(itinerary: itinerary, fileURL: fileURL, profileName: profileName)])
             }
         }
         .task {
@@ -1351,21 +1351,21 @@ struct ShareSheet: UIViewControllerRepresentable {
 
 class ItineraryShareItem: NSObject, UIActivityItemSource {
     let itinerary: Itinerary
-    let url: URL
+    let fileURL: URL
     let profileName: String
 
-    init(itinerary: Itinerary, url: URL, profileName: String) {
+    init(itinerary: Itinerary, fileURL: URL, profileName: String) {
         self.itinerary = itinerary
-        self.url = url
+        self.fileURL = fileURL
         self.profileName = profileName
     }
 
     func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
-        url
+        fileURL
     }
 
     func activityViewController(_ activityViewController: UIActivityViewController, itemForActivityType activityType: UIActivity.ActivityType?) -> Any? {
-        url
+        fileURL
     }
 
     func activityViewController(_ activityViewController: UIActivityViewController, subjectForActivityType activityType: UIActivity.ActivityType?) -> String {
@@ -1375,12 +1375,9 @@ class ItineraryShareItem: NSObject, UIActivityItemSource {
     func activityViewControllerLinkMetadata(_ activityViewController: UIActivityViewController) -> LPLinkMetadata? {
         let metadata = LPLinkMetadata()
         metadata.title = "\(profileName) shared their list with you!"
-        metadata.originalURL = url
 
         if let appIcon = Bundle.main.icon {
             metadata.iconProvider = NSItemProvider(object: appIcon)
-        } else if let logo = UIImage(named: "SafaLogo") {
-            metadata.iconProvider = NSItemProvider(object: logo)
         }
 
         return metadata
