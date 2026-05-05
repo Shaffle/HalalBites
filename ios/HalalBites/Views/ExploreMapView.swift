@@ -105,7 +105,7 @@ enum ActivityType: String, CaseIterable, Identifiable {
 
     var searchQueries: [String] {
         switch self {
-        case .shopping: return ["outlet mall", "shopping mall", "shopping center", "popular shops", "boutique"]
+        case .shopping: return ["mall", "shopping mall", "outlet", "shopping center"]
         default: return [searchQuery]
         }
     }
@@ -806,54 +806,8 @@ struct ExploreMapView: View {
         await MainActor.run { mosques = results }
     }
 
-    private static let outletKeywords = ["outlet", "premium outlets", "mall", "shopping center", "shopping centre", "plaza", "town center", "town centre"]
-
     private func groupOutlets(_ places: [ExplorePlace]) -> [ExplorePlace] {
-        let shoppingCategory = ActivityType.shopping.searchQuery.capitalized
-        let shoppingPlaces = places.filter { $0.category == shoppingCategory }
-        let otherPlaces = places.filter { $0.category != shoppingCategory }
-
-        var outletGroups: [String: (parent: ExplorePlace, stores: [String])] = [:]
-        var standalone: [ExplorePlace] = []
-
-        for place in shoppingPlaces {
-            let nameLower = place.name.lowercased()
-            if let matchedOutlet = outletGroups.keys.first(where: { outletName in
-                let dist = CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
-                    .distance(from: CLLocation(latitude: outletGroups[outletName]!.parent.coordinate.latitude, longitude: outletGroups[outletName]!.parent.coordinate.longitude))
-                return dist < 300
-            }) {
-                outletGroups[matchedOutlet]?.stores.append(place.name)
-            } else if Self.outletKeywords.contains(where: { nameLower.contains($0) }) {
-                outletGroups[place.name] = (parent: place, stores: [])
-            } else {
-                standalone.append(place)
-            }
-        }
-
-        for place in standalone {
-            if let matchedOutlet = outletGroups.keys.first(where: { outletName in
-                let dist = CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
-                    .distance(from: CLLocation(latitude: outletGroups[outletName]!.parent.coordinate.latitude, longitude: outletGroups[outletName]!.parent.coordinate.longitude))
-                return dist < 500
-            }) {
-                outletGroups[matchedOutlet]?.stores.append(place.name)
-            }
-        }
-
-        let outletPlaces: [ExplorePlace] = outletGroups.values.map { group in
-            var outlet = group.parent
-            outlet.outletStores = group.stores.sorted()
-            return outlet
-        }
-
-        let standaloneFiltered = standalone.filter { place in
-            !outletGroups.values.contains { group in
-                group.stores.contains(place.name)
-            }
-        }
-
-        return otherPlaces + outletPlaces + standaloneFiltered
+        places
     }
 
     private func loadAllExplorePlaces() async {
@@ -892,7 +846,58 @@ struct ExploreMapView: View {
                 deduped.append(place)
             }
         }
-        await MainActor.run { allExplorePlaces = deduped }
+
+        let shoppingCategory = ActivityType.shopping.searchQuery.capitalized
+        let mallPlaces = deduped.filter { $0.category == shoppingCategory }
+        let otherPlaces = deduped.filter { $0.category != shoppingCategory }
+
+        let enrichedMalls = await withTaskGroup(of: ExplorePlace.self) { group -> [ExplorePlace] in
+            for mall in mallPlaces {
+                group.addTask {
+                    let stores = await self.fetchStoresInMall(coordinate: mall.coordinate, mallName: mall.name)
+                    var enriched = mall
+                    enriched.outletStores = stores.sorted()
+                    return enriched
+                }
+            }
+            var results: [ExplorePlace] = []
+            for await mall in group { results.append(mall) }
+            return results
+        }
+
+        await MainActor.run { allExplorePlaces = otherPlaces + enrichedMalls }
+    }
+
+    private func fetchStoresInMall(coordinate: CLLocationCoordinate2D, mallName: String) async -> [String] {
+        let queries = ["store", "shop", "restaurant", "food court"]
+        let mallLoc = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        let mallNameLower = mallName.lowercased()
+        var seen: Set<String> = []
+        var stores: [String] = []
+
+        for query in queries {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = query
+            request.region = MKCoordinateRegion(
+                center: coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.004, longitudeDelta: 0.004)
+            )
+
+            guard let response = try? await MKLocalSearch(request: request).start() else { continue }
+            for item in response.mapItems {
+                guard let name = item.name else { continue }
+                let nameLower = name.lowercased()
+                if nameLower == mallNameLower || seen.contains(nameLower) { continue }
+                let dist = CLLocation(latitude: item.placemark.coordinate.latitude, longitude: item.placemark.coordinate.longitude)
+                    .distance(from: mallLoc)
+                if dist < 600 {
+                    seen.insert(nameLower)
+                    stores.append(name)
+                }
+            }
+        }
+
+        return stores
     }
 
     private func fetchPlaces(type: ExplorePlace.PlaceType, query: String, poiCategories: [MKPointOfInterestCategory] = [], displayCategory: String? = nil) async -> [ExplorePlace] {
