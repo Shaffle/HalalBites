@@ -228,14 +228,14 @@ struct ExploreMapView: View {
     @State private var showManualSearch = false
     @State private var searchText = ""
     @State private var searchExpanded = false
-    @State private var selectedFoodType: FoodType?
+    @State private var selectedFoodTypes: Set<FoodType> = []
     @State private var showFilters = false
     @State private var expandedCategory: ExploreFilterCategory?
     @State private var selectedMosque: MosqueLocation?
     @State private var explorePlaces: [ExplorePlace] = []
     @State private var selectedPlace: ExplorePlace?
-    @State private var selectedActivityType: ActivityType?
-    @State private var selectedLandmarkType: LandmarkType?
+    @State private var selectedActivityTypes: Set<ActivityType> = []
+    @State private var selectedLandmarkTypes: Set<LandmarkType> = []
     @State private var showMosques = true
     @State private var hasInitiallyLoaded = false
 
@@ -255,9 +255,9 @@ struct ExploreMapView: View {
                 $0.cuisineType.localizedCaseInsensitiveContains(searchText)
             }
         }
-        if let foodType = selectedFoodType {
-            results = results.filter {
-                foodType.matches($0.cuisineType) || foodType.matches($0.name)
+        if !selectedFoodTypes.isEmpty {
+            results = results.filter { restaurant in
+                selectedFoodTypes.contains { $0.matches(restaurant.cuisineType) || $0.matches(restaurant.name) }
             }
         }
         return results
@@ -445,21 +445,23 @@ struct ExploreMapView: View {
     // MARK: - Explore Filters
 
     private var activeFilterLabel: String {
-        if let food = selectedFoodType { return food.rawValue }
-        if let activity = selectedActivityType { return activity.rawValue }
-        if let landmark = selectedLandmarkType { return landmark.rawValue }
+        let count = selectedFoodTypes.count + selectedActivityTypes.count + selectedLandmarkTypes.count
+        if count > 1 { return "\(count) Filters" }
+        if let food = selectedFoodTypes.first { return food.rawValue }
+        if let activity = selectedActivityTypes.first { return activity.rawValue }
+        if let landmark = selectedLandmarkTypes.first { return landmark.rawValue }
         if !showMosques { return "Mosques Hidden" }
         return "Filters"
     }
 
     private var hasActiveFilter: Bool {
-        selectedFoodType != nil || selectedActivityType != nil || selectedLandmarkType != nil
+        !selectedFoodTypes.isEmpty || !selectedActivityTypes.isEmpty || !selectedLandmarkTypes.isEmpty
     }
 
     private func clearAllFilters() {
-        selectedFoodType = nil
-        selectedActivityType = nil
-        selectedLandmarkType = nil
+        selectedFoodTypes.removeAll()
+        selectedActivityTypes.removeAll()
+        selectedLandmarkTypes.removeAll()
         showMosques = true
         explorePlaces = []
     }
@@ -551,18 +553,18 @@ struct ExploreMapView: View {
 
     private func categoryChipBackground(_ category: ExploreFilterCategory) -> Color {
         switch category {
-        case .food: return selectedFoodType != nil ? category.color : Color(.systemGray5)
-        case .activities: return selectedActivityType != nil ? category.color : Color(.systemGray5)
-        case .landmarks: return selectedLandmarkType != nil ? category.color : Color(.systemGray5)
+        case .food: return !selectedFoodTypes.isEmpty ? category.color : Color(.systemGray5)
+        case .activities: return !selectedActivityTypes.isEmpty ? category.color : Color(.systemGray5)
+        case .landmarks: return !selectedLandmarkTypes.isEmpty ? category.color : Color(.systemGray5)
         case .mosques: return showMosques ? category.color : Color(.systemGray5)
         }
     }
 
     private func categoryChipForeground(_ category: ExploreFilterCategory) -> Color {
         switch category {
-        case .food: return selectedFoodType != nil ? .white : .primary
-        case .activities: return selectedActivityType != nil ? .white : .primary
-        case .landmarks: return selectedLandmarkType != nil ? .white : .primary
+        case .food: return !selectedFoodTypes.isEmpty ? .white : .primary
+        case .activities: return !selectedActivityTypes.isEmpty ? .white : .primary
+        case .landmarks: return !selectedLandmarkTypes.isEmpty ? .white : .primary
         case .mosques: return showMosques ? .white : .primary
         }
     }
@@ -576,7 +578,11 @@ struct ExploreMapView: View {
                     ForEach(FoodType.allCases) { type in
                         Button {
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                selectedFoodType = selectedFoodType == type ? nil : type
+                                if selectedFoodTypes.contains(type) {
+                                    selectedFoodTypes.remove(type)
+                                } else {
+                                    selectedFoodTypes.insert(type)
+                                }
                             }
                         } label: {
                             HStack(spacing: 4) {
@@ -587,8 +593,8 @@ struct ExploreMapView: View {
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(selectedFoodType == type ? Color.teal : Color(.systemGray6))
-                            .foregroundStyle(selectedFoodType == type ? .white : .primary)
+                            .background(selectedFoodTypes.contains(type) ? Color.teal : Color(.systemGray6))
+                            .foregroundStyle(selectedFoodTypes.contains(type) ? .white : .primary)
                             .clipShape(Capsule())
                         }
                     }
@@ -596,13 +602,12 @@ struct ExploreMapView: View {
                     ForEach(ActivityType.allCases) { type in
                         Button {
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                if selectedActivityType == type {
-                                    selectedActivityType = nil
-                                    explorePlaces = []
+                                if selectedActivityTypes.contains(type) {
+                                    selectedActivityTypes.remove(type)
                                 } else {
-                                    selectedActivityType = type
-                                    Task { await searchPlaces(type: .activity, query: type.searchQuery, poiCategories: type.poiCategories) }
+                                    selectedActivityTypes.insert(type)
                                 }
+                                Task { await refreshExplorePlaces() }
                             }
                         } label: {
                             HStack(spacing: 4) {
@@ -613,8 +618,8 @@ struct ExploreMapView: View {
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(selectedActivityType == type ? Color.purple : Color(.systemGray6))
-                            .foregroundStyle(selectedActivityType == type ? .white : .primary)
+                            .background(selectedActivityTypes.contains(type) ? Color.purple : Color(.systemGray6))
+                            .foregroundStyle(selectedActivityTypes.contains(type) ? .white : .primary)
                             .clipShape(Capsule())
                         }
                     }
@@ -622,13 +627,12 @@ struct ExploreMapView: View {
                     ForEach(LandmarkType.allCases) { type in
                         Button {
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                if selectedLandmarkType == type {
-                                    selectedLandmarkType = nil
-                                    explorePlaces = []
+                                if selectedLandmarkTypes.contains(type) {
+                                    selectedLandmarkTypes.remove(type)
                                 } else {
-                                    selectedLandmarkType = type
-                                    Task { await searchPlaces(type: .landmark, query: type.searchQuery, poiCategories: type.poiCategories) }
+                                    selectedLandmarkTypes.insert(type)
                                 }
+                                Task { await refreshExplorePlaces() }
                             }
                         } label: {
                             HStack(spacing: 4) {
@@ -639,8 +643,8 @@ struct ExploreMapView: View {
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(selectedLandmarkType == type ? Color.indigo : Color(.systemGray6))
-                            .foregroundStyle(selectedLandmarkType == type ? .white : .primary)
+                            .background(selectedLandmarkTypes.contains(type) ? Color.indigo : Color(.systemGray6))
+                            .foregroundStyle(selectedLandmarkTypes.contains(type) ? .white : .primary)
                             .clipShape(Capsule())
                         }
                     }
@@ -782,7 +786,25 @@ struct ExploreMapView: View {
         await MainActor.run { mosques = results }
     }
 
-    private func searchPlaces(type: ExplorePlace.PlaceType, query: String, poiCategories: [MKPointOfInterestCategory] = []) async {
+    private func refreshExplorePlaces() async {
+        if selectedActivityTypes.isEmpty && selectedLandmarkTypes.isEmpty {
+            await MainActor.run { explorePlaces = [] }
+            return
+        }
+
+        var allPlaces: [ExplorePlace] = []
+        for activity in selectedActivityTypes {
+            let results = await fetchPlaces(type: .activity, query: activity.searchQuery, poiCategories: activity.poiCategories)
+            allPlaces.append(contentsOf: results)
+        }
+        for landmark in selectedLandmarkTypes {
+            let results = await fetchPlaces(type: .landmark, query: landmark.searchQuery, poiCategories: landmark.poiCategories)
+            allPlaces.append(contentsOf: results)
+        }
+        await MainActor.run { explorePlaces = allPlaces }
+    }
+
+    private func fetchPlaces(type: ExplorePlace.PlaceType, query: String, poiCategories: [MKPointOfInterestCategory] = []) async -> [ExplorePlace] {
         let center: CLLocationCoordinate2D
         if let loc = location.currentLocation {
             center = loc.coordinate
@@ -801,8 +823,8 @@ struct ExploreMapView: View {
             request.pointOfInterestFilter = MKPointOfInterestFilter(including: poiCategories)
         }
 
-        guard let response = try? await MKLocalSearch(request: request).start() else { return }
-        let results = response.mapItems.compactMap { item -> ExplorePlace? in
+        guard let response = try? await MKLocalSearch(request: request).start() else { return [] }
+        return response.mapItems.compactMap { item -> ExplorePlace? in
             guard let name = item.name,
                   item.pointOfInterestCategory != nil else { return nil }
             let address = [
@@ -819,8 +841,6 @@ struct ExploreMapView: View {
                 placeType: type
             )
         }
-
-        await MainActor.run { explorePlaces = results }
     }
 }
 
