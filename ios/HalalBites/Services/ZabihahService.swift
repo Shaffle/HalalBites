@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import MapKit
 
 struct BusinessHours: Hashable, Codable {
     let day: String
@@ -96,6 +97,105 @@ class ZabihahService {
         return restaurants.isEmpty
             ? Self.mockRestaurants(near: latitude, longitude: longitude)
             : restaurants
+    }
+
+    func fetchCombined(latitude: Double, longitude: Double) async -> [ZabihahRestaurant] {
+        async let zabihahResults = (try? fetchNearby(latitude: latitude, longitude: longitude)) ?? []
+        async let appleResults = Self.searchAppleMaps(latitude: latitude, longitude: longitude)
+
+        let zabihah = await zabihahResults
+        let apple = await appleResults
+
+        var merged = zabihah
+        for appleRestaurant in apple {
+            let isDuplicate = zabihah.contains { existing in
+                let nameSimilar = existing.name.lowercased().contains(appleRestaurant.name.lowercased().prefix(8))
+                    || appleRestaurant.name.lowercased().contains(existing.name.lowercased().prefix(8))
+                let distance = CLLocation(latitude: existing.latitude, longitude: existing.longitude)
+                    .distance(from: CLLocation(latitude: appleRestaurant.latitude, longitude: appleRestaurant.longitude))
+                return nameSimilar && distance < 200
+            }
+            if !isDuplicate {
+                merged.append(appleRestaurant)
+            }
+        }
+        return merged.isEmpty ? Self.mockRestaurants(near: latitude, longitude: longitude) : merged
+    }
+
+    static func searchAppleMaps(latitude: Double, longitude: Double, extraQueries: [String] = []) async -> [ZabihahRestaurant] {
+        let center = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        let region = MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15))
+
+        let queries = ["halal restaurant", "halal food", "halal grocery", "halal meat", "mediterranean restaurant", "middle eastern restaurant"] + extraQueries
+        var allItems: [MKMapItem] = []
+        var seenNames: Set<String> = []
+
+        for query in queries {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = query
+            request.region = region
+
+            if let response = try? await MKLocalSearch(request: request).start() {
+                for item in response.mapItems {
+                    let key = (item.name ?? "").lowercased()
+                    if !seenNames.contains(key) {
+                        seenNames.insert(key)
+                        allItems.append(item)
+                    }
+                }
+            }
+        }
+
+        return mapItemsToRestaurants(allItems)
+    }
+
+    private static func mapItemsToRestaurants(_ items: [MKMapItem]) -> [ZabihahRestaurant] {
+        items.compactMap { item -> ZabihahRestaurant? in
+            guard let name = item.name else { return nil }
+            let coord = item.placemark.coordinate
+            let address = [
+                item.placemark.subThoroughfare,
+                item.placemark.thoroughfare,
+                item.placemark.locality,
+                item.placemark.administrativeArea
+            ].compactMap { $0 }.joined(separator: " ")
+
+            let poi = item.pointOfInterestCategory
+            let isCafeOrBakery = poi == .cafe || poi == .bakery
+            let isGrocery = poi == .foodMarket
+
+            let nameLower = name.lowercased()
+            let groceryKeywords = ["grocery", "market", "meat", "butcher", "supermarket"]
+            let cafeKeywords = ["cafe", "café", "coffee", "tea", "bakery", "dessert", "juice", "smoothie"]
+            let isGroceryByName = groceryKeywords.contains { nameLower.contains($0) }
+            let isCafeByName = cafeKeywords.contains { nameLower.contains($0) }
+
+            let cuisineType: String
+            if isCafeOrBakery || isCafeByName {
+                cuisineType = "Cafe"
+            } else if isGrocery || isGroceryByName {
+                cuisineType = "Grocery"
+            } else {
+                cuisineType = "Halal"
+            }
+
+            return ZabihahRestaurant(
+                id: "apple-\(name.hashValue)-\(coord.latitude)",
+                name: name,
+                address: address.isEmpty ? "Nearby" : address,
+                latitude: coord.latitude,
+                longitude: coord.longitude,
+                cuisineType: cuisineType,
+                zabiha: false,
+                rating: nil,
+                reviewCount: 0,
+                halalDescription: nil,
+                isRestaurant: !(isGrocery || isGroceryByName),
+                halalStatus: .fullyHalal,
+                photoURLs: [],
+                businessHours: []
+            )
+        }
     }
 
     static func parseRestaurants(from html: String) -> [ZabihahRestaurant] {
