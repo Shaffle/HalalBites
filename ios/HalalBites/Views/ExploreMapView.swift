@@ -408,8 +408,14 @@ struct ExploreMapView: View {
             if searchExpanded {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                TextField("Search restaurants…", text: $searchText)
+                TextField("Search cities, places, restaurants…", text: $searchText)
                     .textFieldStyle(.plain)
+                    .submitLabel(.search)
+                    .onSubmit {
+                        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !query.isEmpty else { return }
+                        Task { await performSearch(query: query) }
+                    }
                 Button {
                     withAnimation(.easeInOut(duration: 0.25)) {
                         searchText = ""
@@ -721,6 +727,39 @@ struct ExploreMapView: View {
             .first?.location?.coordinate else { return }
         await MainActor.run {
             centreAndLoad(coordinate: coordinate)
+        }
+    }
+
+    private func performSearch(query: String) async {
+        if let coordinate = try? await CLGeocoder()
+            .geocodeAddressString(query)
+            .first?.location?.coordinate {
+            await MainActor.run {
+                centreAndLoad(coordinate: coordinate)
+            }
+            return
+        }
+
+        let center: CLLocationCoordinate2D
+        if let loc = location.currentLocation {
+            center = loc.coordinate
+        } else {
+            center = CLLocationCoordinate2D(latitude: 33.3062, longitude: -111.8413)
+        }
+
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        request.region = MKCoordinateRegion(
+            center: center,
+            span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.5)
+        )
+
+        guard let response = try? await MKLocalSearch(request: request).start(),
+              let firstItem = response.mapItems.first else { return }
+
+        let coord = firstItem.placemark.coordinate
+        await MainActor.run {
+            centreAndLoad(coordinate: coord)
         }
     }
 
