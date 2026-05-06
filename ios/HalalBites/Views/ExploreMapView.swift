@@ -1045,8 +1045,8 @@ struct ZabihahRestaurantSheet: View {
     @EnvironmentObject var location: LocationService
     @State private var phoneNumber: String?
     @State private var loadingPhone = true
-    @State private var menuURL: URL?
-    @State private var loadingMenu = true
+    @State private var menuCategories: [MenuCategory] = []
+    @State private var loadingMenu = false
     @State private var showMenuSheet = false
     @State private var showAddSheet = false
     @State private var showSwapSheet = false
@@ -1425,16 +1425,71 @@ struct ZabihahRestaurantSheet: View {
         NavigationStack {
             Group {
                 if loadingMenu {
-                    ProgressView("Loading menu…")
-                } else if let url = menuURL {
-                    ExploreMenuWebView(url: url)
-                        .ignoresSafeArea(edges: .bottom)
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                        Text("Finding menu…")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if menuCategories.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "menucard")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.quaternary)
+                        Text("Menu not available")
+                            .font(.headline)
+                        Text("We couldn't find a menu for this restaurant.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(40)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    let query = "\(restaurant.name) \(restaurant.address) menu"
-                        .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                    if let url = URL(string: "https://www.yelp.com/search?find_desc=\(query)") {
-                        ExploreMenuWebView(url: url)
-                            .ignoresSafeArea(edges: .bottom)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            ForEach(menuCategories) { category in
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text(category.category)
+                                        .font(.title3.bold())
+                                        .padding(.horizontal, 20)
+
+                                    ForEach(category.items) { item in
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            HStack(alignment: .top) {
+                                                Text(item.name)
+                                                    .font(.subheadline.bold())
+                                                Spacer()
+                                                if !item.price.isEmpty {
+                                                    Text(item.price)
+                                                        .font(.subheadline.bold())
+                                                        .foregroundStyle(.teal)
+                                                }
+                                            }
+                                            if !item.description.isEmpty {
+                                                Text(item.description)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                                    .lineLimit(2)
+                                            }
+                                        }
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 8)
+                                        .background(Color(.secondarySystemBackground))
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        .padding(.horizontal, 16)
+                                    }
+                                }
+
+                                if category.id != menuCategories.last?.id {
+                                    Divider()
+                                        .padding(.horizontal, 20)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 16)
                     }
                 }
             }
@@ -1445,6 +1500,17 @@ struct ZabihahRestaurantSheet: View {
                     Button("Done") { showMenuSheet = false }
                 }
             }
+        }
+        .task {
+            guard menuCategories.isEmpty else { return }
+            loadingMenu = true
+            menuCategories = await ScrapingService.shared.fetchMenu(
+                name: restaurant.name,
+                address: restaurant.address,
+                latitude: restaurant.latitude,
+                longitude: restaurant.longitude
+            )
+            loadingMenu = false
         }
     }
 
@@ -1462,16 +1528,10 @@ struct ZabihahRestaurantSheet: View {
         let search = MKLocalSearch(request: request)
         let response = try? await search.start()
         let item = response?.mapItems.first
-        let phone = item?.phoneNumber
-        let website = item?.url
 
         await MainActor.run {
-            phoneNumber = phone
+            phoneNumber = item?.phoneNumber
             loadingPhone = false
-            if let website, website.host() != nil {
-                menuURL = website
-            }
-            loadingMenu = false
         }
     }
 

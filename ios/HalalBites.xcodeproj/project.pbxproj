@@ -18,6 +18,9 @@
 		3096AFD12FA824ED00ED2EBA /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFD02FA824ED00ED2EBA /* OnboardingView.swift */; };
 		3096AFD32FA82D3400ED2EBA /* CloudKitShareService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFD22FA82D3400ED2EBA /* CloudKitShareService.swift */; };
 		3096AFD62FA920E700ED2EBA /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFD52FA920E700ED2EBA /* NotificationService.swift */; };
+		3096AFD82FAAFD8B00ED2EBA /* APIKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFD72FAAFD8B00ED2EBA /* APIKeys.swift */; };
+		3096AFDB2FAAFDEB00ED2EBA /* Secrets.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3096AFDA2FAAFDEB00ED2EBA /* Secrets.plist */; };
+		3096AFDD2FAB025600ED2EBA /* ScrapingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3096AFDC2FAB025600ED2EBA /* ScrapingService.swift */; };
 		30FDCD922FA5DA04001CD543 /* SplashScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */; };
 		30FDCD942FA5DAC6001CD543 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 30FDCD932FA5DAC6001CD543 /* Assets.xcassets */; };
 		30FDCD962FA5E475001CD543 /* SideMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30FDCD952FA5E475001CD543 /* SideMenuView.swift */; };
@@ -49,6 +52,9 @@
 		3096AFD22FA82D3400ED2EBA /* CloudKitShareService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitShareService.swift; sourceTree = "<group>"; };
 		3096AFD42FA82D8D00ED2EBA /* HalalBites.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HalalBites.entitlements; sourceTree = "<group>"; };
 		3096AFD52FA920E700ED2EBA /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		3096AFD72FAAFD8B00ED2EBA /* APIKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIKeys.swift; sourceTree = "<group>"; };
+		3096AFDA2FAAFDEB00ED2EBA /* Secrets.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Secrets.plist; sourceTree = "<group>"; };
+		3096AFDC2FAB025600ED2EBA /* ScrapingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrapingService.swift; sourceTree = "<group>"; };
 		30FDCD912FA5DA04001CD543 /* SplashScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreenView.swift; sourceTree = "<group>"; };
 		30FDCD932FA5DAC6001CD543 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		30FDCD952FA5E475001CD543 /* SideMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SideMenuView.swift; sourceTree = "<group>"; };
@@ -96,6 +102,7 @@
 				AE000003 /* Models */,
 				AE000004 /* Services */,
 				AE000005 /* Views */,
+				3096AFDA2FAAFDEB00ED2EBA /* Secrets.plist */,
 			);
 			path = HalalBites;
 			sourceTree = "<group>";
@@ -130,6 +137,8 @@
 				3096AFCD2FA81B2900ED2EBA /* ItineraryShareManager.swift */,
 				3096AFD22FA82D3400ED2EBA /* CloudKitShareService.swift */,
 				3096AFD52FA920E700ED2EBA /* NotificationService.swift */,
+				3096AFD72FAAFD8B00ED2EBA /* APIKeys.swift */,
+				3096AFDC2FAB025600ED2EBA /* ScrapingService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -219,6 +228,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3096AFDB2FAAFDEB00ED2EBA /* Secrets.plist in Resources */,
 				30FDCD942FA5DAC6001CD543 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -232,9 +242,11 @@
 			files = (
 				302117142FA5F69800D9E517 /* RecentView.swift in Sources */,
 				AA000001 /* HalalBitesApp.swift in Sources */,
+				3096AFD82FAAFD8B00ED2EBA /* APIKeys.swift in Sources */,
 				302169302FA5C4B3009731F9 /* YelpService.swift in Sources */,
 				30FDCD962FA5E475001CD543 /* SideMenuView.swift in Sources */,
 				30FDCD9A2FA5E486001CD543 /* SettingsView.swift in Sources */,
+				3096AFDD2FAB025600ED2EBA /* ScrapingService.swift in Sources */,
 				30FDCD922FA5DA04001CD543 /* SplashScreenView.swift in Sources */,
 				AA000003 /* Restaurant.swift in Sources */,
 				AA000004 /* Itinerary.swift in Sources */,

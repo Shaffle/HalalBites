@@ -255,7 +255,7 @@ class ZabihahService {
 
 // MARK: - API Response Model
 
-private struct APIRestaurant: Decodable {
+struct APIRestaurant: Decodable {
     let id: String
     let name: String
     let address: String
