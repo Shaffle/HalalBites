@@ -1048,6 +1048,7 @@ struct ZabihahRestaurantSheet: View {
     @State private var menuCategories: [MenuCategory] = []
     @State private var loadingMenu = false
     @State private var showMenuSheet = false
+    @State private var menuFallbackURL: URL?
     @State private var showAddSheet = false
     @State private var showSwapSheet = false
     @State private var travel: TravelInfo?
@@ -1433,21 +1434,7 @@ struct ZabihahRestaurantSheet: View {
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if menuCategories.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "menucard")
-                            .font(.system(size: 48))
-                            .foregroundStyle(.quaternary)
-                        Text("Menu not available")
-                            .font(.headline)
-                        Text("We couldn't find a menu for this restaurant.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(40)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
+                } else if !menuCategories.isEmpty {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 20) {
                             ForEach(menuCategories) { category in
@@ -1491,6 +1478,14 @@ struct ZabihahRestaurantSheet: View {
                         }
                         .padding(.vertical, 16)
                     }
+                } else if let fallbackURL = menuFallbackURL {
+                    ExploreMenuWebView(url: fallbackURL)
+                        .ignoresSafeArea(edges: .bottom)
+                } else {
+                    let query = "\(restaurant.name) \(restaurant.address) menu"
+                        .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                    ExploreMenuWebView(url: URL(string: "https://www.google.com/search?q=\(query)")!)
+                        .ignoresSafeArea(edges: .bottom)
                 }
             }
             .navigationTitle("Menu")
@@ -1510,6 +1505,19 @@ struct ZabihahRestaurantSheet: View {
                 latitude: restaurant.latitude,
                 longitude: restaurant.longitude
             )
+            if menuCategories.isEmpty {
+                let request = MKLocalSearch.Request()
+                request.naturalLanguageQuery = restaurant.name
+                request.region = MKCoordinateRegion(
+                    center: restaurant.coordinate,
+                    latitudinalMeters: 500,
+                    longitudinalMeters: 500
+                )
+                if let response = try? await MKLocalSearch(request: request).start(),
+                   let website = response.mapItems.first?.url {
+                    menuFallbackURL = website
+                }
+            }
             loadingMenu = false
         }
     }
