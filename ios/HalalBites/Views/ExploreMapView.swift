@@ -96,17 +96,10 @@ enum ActivityType: String, CaseIterable, Identifiable {
         switch self {
         case .parks: return "park"
         case .museums: return "museum"
-        case .shopping: return "shopping mall"
+        case .shopping: return "shopping"
         case .entertainment: return "entertainment"
         case .sports: return "sports recreation"
         case .nightlife: return "nightlife"
-        }
-    }
-
-    var searchQueries: [String] {
-        switch self {
-        case .shopping: return ["mall", "shopping mall", "outlet", "shopping center"]
-        default: return [searchQuery]
         }
     }
 
@@ -195,7 +188,6 @@ struct ExplorePlace: Identifiable, Hashable {
     let coordinate: CLLocationCoordinate2D
     let category: String
     let placeType: PlaceType
-    var outletStores: [String] = []
 
     enum PlaceType: String, Hashable {
         case activity, landmark
@@ -255,13 +247,12 @@ struct ExploreMapView: View {
         }
         let activeActivityQueries = Set(selectedActivityTypes.map { $0.searchQuery.capitalized })
         let activeLandmarkQueries = Set(selectedLandmarkTypes.map { $0.searchQuery.capitalized })
-        let filtered = allExplorePlaces.filter { place in
+        return allExplorePlaces.filter { place in
             switch place.placeType {
             case .activity: return activeActivityQueries.contains(place.category)
             case .landmark: return activeLandmarkQueries.contains(place.category)
             }
         }
-        return groupOutlets(filtered)
     }
 
     private var locationDenied: Bool {
@@ -417,7 +408,7 @@ struct ExploreMapView: View {
         }
         .sheet(item: $selectedPlace) { place in
             ExplorePlaceSheet(place: place)
-                .presentationDetents(place.outletStores.isEmpty ? [.medium] : [.medium, .large])
+                .presentationDetents([.medium])
         }
     }
 
@@ -806,18 +797,10 @@ struct ExploreMapView: View {
         await MainActor.run { mosques = results }
     }
 
-    private func groupOutlets(_ places: [ExplorePlace]) -> [ExplorePlace] {
-        places
-    }
-
     private func loadAllExplorePlaces() async {
         async let activityResults = withTaskGroup(of: [ExplorePlace].self) { group -> [ExplorePlace] in
             for activity in ActivityType.allCases {
-                for query in activity.searchQueries {
-                    let cat = activity.searchQuery.capitalized
-                    let pois = activity.poiCategories
-                    group.addTask { await self.fetchPlaces(type: .activity, query: query, poiCategories: pois, displayCategory: cat) }
-                }
+                group.addTask { await self.fetchPlaces(type: .activity, query: activity.searchQuery, poiCategories: activity.poiCategories) }
             }
             var results: [ExplorePlace] = []
             for await batch in group { results.append(contentsOf: batch) }
@@ -825,9 +808,7 @@ struct ExploreMapView: View {
         }
         async let landmarkResults = withTaskGroup(of: [ExplorePlace].self) { group -> [ExplorePlace] in
             for landmark in LandmarkType.allCases {
-                let cat = landmark.searchQuery.capitalized
-                let pois = landmark.poiCategories
-                group.addTask { await self.fetchPlaces(type: .landmark, query: landmark.searchQuery, poiCategories: pois, displayCategory: cat) }
+                group.addTask { await self.fetchPlaces(type: .landmark, query: landmark.searchQuery, poiCategories: landmark.poiCategories) }
             }
             var results: [ExplorePlace] = []
             for await batch in group { results.append(contentsOf: batch) }
@@ -846,71 +827,25 @@ struct ExploreMapView: View {
                 deduped.append(place)
             }
         }
-
-        let shoppingCategory = ActivityType.shopping.searchQuery.capitalized
-        let mallPlaces = deduped.filter { $0.category == shoppingCategory }
-        let otherPlaces = deduped.filter { $0.category != shoppingCategory }
-
-        let enrichedMalls = await withTaskGroup(of: ExplorePlace.self) { group -> [ExplorePlace] in
-            for mall in mallPlaces {
-                group.addTask {
-                    let stores = await self.fetchStoresInMall(coordinate: mall.coordinate, mallName: mall.name)
-                    var enriched = mall
-                    enriched.outletStores = stores.sorted()
-                    return enriched
-                }
-            }
-            var results: [ExplorePlace] = []
-            for await mall in group { results.append(mall) }
-            return results
-        }
-
-        await MainActor.run { allExplorePlaces = otherPlaces + enrichedMalls }
+        await MainActor.run { allExplorePlaces = deduped }
     }
 
-    private func fetchStoresInMall(coordinate: CLLocationCoordinate2D, mallName: String) async -> [String] {
-        let queries = ["store", "shop", "restaurant", "food court"]
-        let mallLoc = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        let mallNameLower = mallName.lowercased()
-        var seen: Set<String> = []
-        var stores: [String] = []
-
-        for query in queries {
-            let request = MKLocalSearch.Request()
-            request.naturalLanguageQuery = query
-            request.region = MKCoordinateRegion(
-                center: coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.004, longitudeDelta: 0.004)
-            )
-
-            guard let response = try? await MKLocalSearch(request: request).start() else { continue }
-            for item in response.mapItems {
-                guard let name = item.name else { continue }
-                let nameLower = name.lowercased()
-                if nameLower == mallNameLower || seen.contains(nameLower) { continue }
-                let dist = CLLocation(latitude: item.placemark.coordinate.latitude, longitude: item.placemark.coordinate.longitude)
-                    .distance(from: mallLoc)
-                if dist < 600 {
-                    seen.insert(nameLower)
-                    stores.append(name)
-                }
-            }
-        }
-
-        return stores
-    }
-
-    private func fetchPlaces(type: ExplorePlace.PlaceType, query: String, poiCategories: [MKPointOfInterestCategory] = [], displayCategory: String? = nil) async -> [ExplorePlace] {
+    private func fetchPlaces(type: ExplorePlace.PlaceType, query: String, poiCategories: [MKPointOfInterestCategory] = []) async -> [ExplorePlace] {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
         request.region = MKCoordinateRegion(
             center: mapCenter,
-            span: MKCoordinateSpan(latitudeDelta: 0.2, longitudeDelta: 0.2)
+            span: MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)
         )
+        request.resultTypes = .pointOfInterest
+        if !poiCategories.isEmpty {
+            request.pointOfInterestFilter = MKPointOfInterestFilter(including: poiCategories)
+        }
 
         guard let response = try? await MKLocalSearch(request: request).start() else { return [] }
         return response.mapItems.compactMap { item -> ExplorePlace? in
-            guard let name = item.name else { return nil }
+            guard let name = item.name,
+                  item.pointOfInterestCategory != nil else { return nil }
             let address = [
                 item.placemark.subThoroughfare,
                 item.placemark.thoroughfare,
@@ -921,7 +856,7 @@ struct ExploreMapView: View {
                 name: name,
                 address: address.isEmpty ? "Nearby" : address,
                 coordinate: item.placemark.coordinate,
-                category: displayCategory ?? query.capitalized,
+                category: query.capitalized,
                 placeType: type
             )
         }
@@ -1995,75 +1930,44 @@ struct ExplorePlaceSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(place.name)
-                                .font(.title2.bold())
-                            Text(place.category)
-                                .font(.subheadline)
-                                .foregroundStyle(place.placeType == .activity ? .purple : .indigo)
-                        }
-                        Spacer()
-                        Image(systemName: place.placeType == .activity ? "figure.walk" : "building.columns.fill")
-                            .font(.title2)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(place.name)
+                            .font(.title2.bold())
+                        Text(place.category)
+                            .font(.subheadline)
                             .foregroundStyle(place.placeType == .activity ? .purple : .indigo)
                     }
-
-                    Label(place.address, systemImage: "mappin.circle.fill")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    if !place.outletStores.isEmpty {
-                        Divider()
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "building.2.fill")
-                                    .foregroundStyle(.purple)
-                                Text("Stores")
-                                    .font(.headline)
-                                Text("(\(place.outletStores.count))")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
-                                ForEach(place.outletStores, id: \.self) { store in
-                                    HStack(spacing: 6) {
-                                        Circle()
-                                            .fill(.purple.opacity(0.3))
-                                            .frame(width: 6, height: 6)
-                                        Text(store)
-                                            .font(.subheadline)
-                                            .lineLimit(1)
-                                    }
-                                }
-                            }
-                        }
-                        .padding(14)
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
-                    }
-
-                    Divider()
-
-                    Button {
-                        let placemark = MKPlacemark(coordinate: place.coordinate)
-                        let mapItem = MKMapItem(placemark: placemark)
-                        mapItem.name = place.name
-                        mapItem.openInMaps(launchOptions: [
-                            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
-                        ])
-                    } label: {
-                        Label("Directions", systemImage: "map.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(place.placeType == .activity ? .purple : .indigo)
+                    Spacer()
+                    Image(systemName: place.placeType == .activity ? "figure.walk" : "building.columns.fill")
+                        .font(.title2)
+                        .foregroundStyle(place.placeType == .activity ? .purple : .indigo)
                 }
-                .padding(24)
+
+                Label(place.address, systemImage: "mappin.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Divider()
+
+                Button {
+                    let placemark = MKPlacemark(coordinate: place.coordinate)
+                    let mapItem = MKMapItem(placemark: placemark)
+                    mapItem.name = place.name
+                    mapItem.openInMaps(launchOptions: [
+                        MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                    ])
+                } label: {
+                    Label("Directions", systemImage: "map.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(place.placeType == .activity ? .purple : .indigo)
+
+                Spacer()
             }
+            .padding(24)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
