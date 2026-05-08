@@ -102,31 +102,45 @@ class ZabihahService {
     func fetchCombined(latitude: Double, longitude: Double) async -> [ZabihahRestaurant] {
         async let zabihahResults = (try? fetchNearby(latitude: latitude, longitude: longitude)) ?? []
         async let appleResults = Self.searchAppleMaps(latitude: latitude, longitude: longitude)
+        async let backendResults = Self.fetchScraplingRestaurants(latitude: latitude, longitude: longitude)
 
         let zabihah = await zabihahResults
         let apple = await appleResults
+        let backend = await backendResults
 
         var merged = zabihah
-        for appleRestaurant in apple {
-            let isDuplicate = zabihah.contains { existing in
-                let nameSimilar = existing.name.lowercased().contains(appleRestaurant.name.lowercased().prefix(8))
-                    || appleRestaurant.name.lowercased().contains(existing.name.lowercased().prefix(8))
+
+        for restaurant in apple + backend {
+            let isDuplicate = merged.contains { existing in
+                let nameSimilar = existing.name.lowercased().contains(restaurant.name.lowercased().prefix(8))
+                    || restaurant.name.lowercased().contains(existing.name.lowercased().prefix(8))
                 let distance = CLLocation(latitude: existing.latitude, longitude: existing.longitude)
-                    .distance(from: CLLocation(latitude: appleRestaurant.latitude, longitude: appleRestaurant.longitude))
+                    .distance(from: CLLocation(latitude: restaurant.latitude, longitude: restaurant.longitude))
                 return nameSimilar && distance < 200
             }
             if !isDuplicate {
-                merged.append(appleRestaurant)
+                merged.append(restaurant)
             }
         }
         return merged.isEmpty ? Self.mockRestaurants(near: latitude, longitude: longitude) : merged
+    }
+
+    private static func fetchScraplingRestaurants(latitude: Double, longitude: Double) async -> [ZabihahRestaurant] {
+        guard let data = await ScrapingService.shared.fetchRestaurantsDecoded(
+            latitude: latitude, longitude: longitude
+        ) else { return [] }
+
+        guard let decoded = try? JSONDecoder().decode([APIRestaurant].self, from: data),
+              !decoded.isEmpty else { return [] }
+
+        return decoded.map { $0.toZabihahRestaurant() }
     }
 
     static func searchAppleMaps(latitude: Double, longitude: Double, extraQueries: [String] = []) async -> [ZabihahRestaurant] {
         let center = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
         let region = MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15))
 
-        let queries = ["halal restaurant", "halal food", "halal grocery", "halal meat", "mediterranean restaurant", "middle eastern restaurant"] + extraQueries
+        let queries = ["halal restaurant", "halal food", "halal grocery", "halal meat"] + extraQueries
         var allItems: [MKMapItem] = []
         var seenNames: Set<String> = []
 
@@ -149,6 +163,11 @@ class ZabihahService {
         return mapItemsToRestaurants(allItems)
     }
 
+    private static let halalIndicators = ["halal", "zabihah", "zabiha", "mediterranean", "middle eastern",
+        "kebab", "kabob", "shawarma", "falafel", "biryani", "pakistani", "afghan", "turkish",
+        "moroccan", "somali", "yemeni", "egyptian", "lebanese", "persian", "arab", "desi",
+        "tikka", "naan", "tandoori", "gyro", "hummus", "masjid", "islamic"]
+
     private static func mapItemsToRestaurants(_ items: [MKMapItem]) -> [ZabihahRestaurant] {
         items.compactMap { item -> ZabihahRestaurant? in
             guard let name = item.name else { return nil }
@@ -160,11 +179,14 @@ class ZabihahService {
                 item.placemark.administrativeArea
             ].compactMap { $0 }.joined(separator: " ")
 
+            let nameLower = name.lowercased()
+            let hasHalalSignal = halalIndicators.contains { nameLower.contains($0) }
+            if !hasHalalSignal { return nil }
+
             let poi = item.pointOfInterestCategory
             let isCafeOrBakery = poi == .cafe || poi == .bakery
             let isGrocery = poi == .foodMarket
 
-            let nameLower = name.lowercased()
             let groceryKeywords = ["grocery", "market", "meat", "butcher", "supermarket"]
             let cafeKeywords = ["cafe", "café", "coffee", "tea", "bakery", "dessert", "juice", "smoothie"]
             let isGroceryByName = groceryKeywords.contains { nameLower.contains($0) }
