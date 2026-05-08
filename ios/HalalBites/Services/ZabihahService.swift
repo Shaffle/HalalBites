@@ -142,13 +142,13 @@ class ZabihahService {
 
         let queries = [
             "halal restaurant", "halal food", "halal grocery", "halal meat",
-            "halal cafe", "halal bakery", "halal coffee",
+            "cafe", "bakery", "coffee",
             "mediterranean restaurant", "middle eastern restaurant",
             "pakistani restaurant", "afghan restaurant", "turkish restaurant",
-            "lebanese restaurant", "moroccan restaurant", "persian restaurant",
+            "lebanese restaurant", "moroccan restaurant", "persian restaurant", "mexican restaurant", "thai restaurant", "chinese restaurant",
             "shawarma", "kebab", "falafel", "biryani",
             "indian restaurant", "somali restaurant", "yemeni restaurant",
-            "arab restaurant", "egyptian restaurant"
+            "cafe", "coffee shop", "bakery", "donut shop", "dessert"
         ] + extraQueries
         let allResults = await withTaskGroup(of: [MKMapItem].self) { group in
             for query in queries {
@@ -177,18 +177,27 @@ class ZabihahService {
         return mapItemsToRestaurants(unique)
     }
 
+    private static let rejectedNames = [
+        "chevron", "shell", "exxon", "mobil", "bp ", "arco", "76 ", "sinclair",
+        "gas station", "fuel", "7-eleven", "circle k", "maverick",
+        "walmart", "target", "costco", "dollar", "home depot", "lowes",
+        "walgreens", "cvs", "rite aid", "autozone", "o'reilly"
+    ]
+
+    private static let nonFoodPOIs: Set<MKPointOfInterestCategory> = [
+        .gasStation, .parking, .hotel, .hospital, .pharmacy, .police,
+        .fireStation, .school, .university, .postOffice, .bank, .atm,
+        .carRental, .evCharger, .laundry, .store
+    ]
+
     private static func mapItemsToRestaurants(_ items: [MKMapItem]) -> [ZabihahRestaurant] {
         items.compactMap { item -> ZabihahRestaurant? in
             guard let name = item.name else { return nil }
             let coord = item.placemark.coordinate
-            let address = [
-                item.placemark.subThoroughfare,
-                item.placemark.thoroughfare,
-                item.placemark.locality,
-                item.placemark.administrativeArea
-            ].compactMap { $0 }.joined(separator: " ")
-
             let nameLower = name.lowercased()
+
+            if rejectedNames.contains(where: { nameLower.contains($0) }) { return nil }
+            if let poi = item.pointOfInterestCategory, nonFoodPOIs.contains(poi) { return nil }
 
             let poi = item.pointOfInterestCategory
             let isCafeOrBakery = poi == .cafe || poi == .bakery
@@ -198,15 +207,25 @@ class ZabihahService {
             let cafeKeywords = ["cafe", "café", "coffee", "tea", "bakery", "dessert", "juice", "smoothie"]
             let isGroceryByName = groceryKeywords.contains { nameLower.contains($0) }
             let isCafeByName = cafeKeywords.contains { nameLower.contains($0) }
+            let isCafe = isCafeOrBakery || isCafeByName
+
+            let address = [
+                item.placemark.subThoroughfare,
+                item.placemark.thoroughfare,
+                item.placemark.locality,
+                item.placemark.administrativeArea
+            ].compactMap { $0 }.joined(separator: " ")
 
             let cuisineType: String
-            if isCafeOrBakery || isCafeByName {
+            if isCafe {
                 cuisineType = "Cafe"
             } else if isGrocery || isGroceryByName {
                 cuisineType = "Grocery"
             } else {
-                cuisineType = "Halal"
+                cuisineType = "Restaurant"
             }
+
+            let halalStatus: ZabihahHalalStatus = isCafe ? .partiallyHalal : .fullyHalal
 
             return ZabihahRestaurant(
                 id: "apple-\(name.hashValue)-\(coord.latitude)",
@@ -218,9 +237,9 @@ class ZabihahService {
                 zabiha: false,
                 rating: nil,
                 reviewCount: 0,
-                halalDescription: nil,
+                halalDescription: isCafe ? nil : "Verify halal status",
                 isRestaurant: !(isGrocery || isGroceryByName),
-                halalStatus: .fullyHalal,
+                halalStatus: halalStatus,
                 photoURLs: [],
                 businessHours: []
             )
