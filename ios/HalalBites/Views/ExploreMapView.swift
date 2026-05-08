@@ -205,6 +205,7 @@ struct ExplorePlace: Identifiable, Hashable {
 // MARK: - Explore Map
 
 struct ExploreMapView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var location: LocationService
     @Binding var itineraries: [Itinerary]
     @Binding var showSideMenu: Bool
@@ -386,10 +387,25 @@ struct ExploreMapView: View {
                 break
             }
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active && restaurants.isEmpty, let loc = location.currentLocation {
+                centreAndLoad(coordinate: loc.coordinate)
+            }
+        }
         .task {
-            if restaurants.isEmpty {
-                await loadNearby(coordinate: mapCenter)
-                await searchMosques(near: mapCenter)
+            if restaurants.isEmpty && !hasInitiallyLoaded {
+                for _ in 0..<10 {
+                    if location.currentLocation != nil { break }
+                    try? await Task.sleep(for: .milliseconds(300))
+                }
+                guard !hasInitiallyLoaded else { return }
+                if let loc = location.currentLocation {
+                    hasInitiallyLoaded = true
+                    centreAndLoad(coordinate: loc.coordinate)
+                } else {
+                    await loadNearby(coordinate: mapCenter)
+                    await searchMosques(near: mapCenter)
+                }
             }
         }
         .sheet(isPresented: $showManualSearch) {

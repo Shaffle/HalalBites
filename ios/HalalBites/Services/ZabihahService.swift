@@ -138,35 +138,44 @@ class ZabihahService {
 
     static func searchAppleMaps(latitude: Double, longitude: Double, extraQueries: [String] = []) async -> [ZabihahRestaurant] {
         let center = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-        let region = MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15))
+        let region = MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 0.25, longitudeDelta: 0.25))
 
-        let queries = ["halal restaurant", "halal food", "halal grocery", "halal meat"] + extraQueries
-        var allItems: [MKMapItem] = []
-        var seenNames: Set<String> = []
-
-        for query in queries {
-            let request = MKLocalSearch.Request()
-            request.naturalLanguageQuery = query
-            request.region = region
-
-            if let response = try? await MKLocalSearch(request: request).start() {
-                for item in response.mapItems {
-                    let key = (item.name ?? "").lowercased()
-                    if !seenNames.contains(key) {
-                        seenNames.insert(key)
-                        allItems.append(item)
-                    }
+        let queries = [
+            "halal restaurant", "halal food", "halal grocery", "halal meat",
+            "halal cafe", "halal bakery", "halal coffee",
+            "mediterranean restaurant", "middle eastern restaurant",
+            "pakistani restaurant", "afghan restaurant", "turkish restaurant",
+            "lebanese restaurant", "moroccan restaurant", "persian restaurant",
+            "shawarma", "kebab", "falafel", "biryani",
+            "indian restaurant", "somali restaurant", "yemeni restaurant",
+            "arab restaurant", "egyptian restaurant"
+        ] + extraQueries
+        let allResults = await withTaskGroup(of: [MKMapItem].self) { group in
+            for query in queries {
+                group.addTask {
+                    let request = MKLocalSearch.Request()
+                    request.naturalLanguageQuery = query
+                    request.region = region
+                    return (try? await MKLocalSearch(request: request).start())?.mapItems ?? []
                 }
+            }
+            var items: [MKMapItem] = []
+            for await batch in group { items.append(contentsOf: batch) }
+            return items
+        }
+
+        var seenNames: Set<String> = []
+        var unique: [MKMapItem] = []
+        for item in allResults {
+            let key = (item.name ?? "").lowercased()
+            if !seenNames.contains(key) {
+                seenNames.insert(key)
+                unique.append(item)
             }
         }
 
-        return mapItemsToRestaurants(allItems)
+        return mapItemsToRestaurants(unique)
     }
-
-    private static let halalIndicators = ["halal", "zabihah", "zabiha", "mediterranean", "middle eastern",
-        "kebab", "kabob", "shawarma", "falafel", "biryani", "pakistani", "afghan", "turkish",
-        "moroccan", "somali", "yemeni", "egyptian", "lebanese", "persian", "arab", "desi",
-        "tikka", "naan", "tandoori", "gyro", "hummus", "masjid", "islamic"]
 
     private static func mapItemsToRestaurants(_ items: [MKMapItem]) -> [ZabihahRestaurant] {
         items.compactMap { item -> ZabihahRestaurant? in
@@ -180,8 +189,6 @@ class ZabihahService {
             ].compactMap { $0 }.joined(separator: " ")
 
             let nameLower = name.lowercased()
-            let hasHalalSignal = halalIndicators.contains { nameLower.contains($0) }
-            if !hasHalalSignal { return nil }
 
             let poi = item.pointOfInterestCategory
             let isCafeOrBakery = poi == .cafe || poi == .bakery
