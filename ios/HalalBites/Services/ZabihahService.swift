@@ -56,7 +56,7 @@ struct ZabihahRestaurant: Identifiable, Hashable {
         return Self.cafeKeywords.contains { lower.contains($0) }
     }
 
-    private static let excludedChains = ["starbucks", "dunkin", "mcdonald", "subway"]
+    private static let excludedChains = ["starbucks", "dunkin", "mcdonalds", "subway", "burger king", "carls jr.", "wendy's", "pizza hut", "chipotle", "taco bell", "red lobster", "jack in the box", "kfc", "costco"]
 
     var isExcludedChain: Bool {
         let lower = name.lowercased()
@@ -179,15 +179,19 @@ class ZabihahService {
 
     private static let rejectedNames = [
         "chevron", "shell", "exxon", "mobil", "bp ", "arco", "76 ", "sinclair",
-        "gas station", "fuel", "7-eleven", "circle k", "maverick",
+        "gas station", "fuel", "7-eleven", "circle k", "maverick", "quiktrip", "wawa",
+        "mcdonald", "burger king", "wendy's", "taco bell", "jack in the box",
+        "popeyes", "kfc", "chick-fil-a", "panda express", "chipotle", "subway",
+        "applebee's", "chili's", "olive garden", "red lobster", "outback",
+        "denny's", "ihop", "cheesecake factory", "panera", "buffalo wild wings",
         "walmart", "target", "costco", "dollar", "home depot", "lowes",
-        "walgreens", "cvs", "rite aid", "autozone", "o'reilly"
+        "walgreens", "cvs", "rite aid", "autozone", "o'reilly", "fedex", "ups store"
     ]
 
     private static let nonFoodPOIs: Set<MKPointOfInterestCategory> = [
         .gasStation, .parking, .hotel, .hospital, .pharmacy, .police,
         .fireStation, .school, .university, .postOffice, .bank, .atm,
-        .carRental, .evCharger, .laundry, .store
+        .carRental, .evCharger, .laundry, .store, .fitnessCenter, .movieTheater
     ]
 
     private static func mapItemsToRestaurants(_ items: [MKMapItem]) -> [ZabihahRestaurant] {
@@ -197,9 +201,10 @@ class ZabihahService {
             let nameLower = name.lowercased()
 
             if rejectedNames.contains(where: { nameLower.contains($0) }) { return nil }
-            if let poi = item.pointOfInterestCategory, nonFoodPOIs.contains(poi) { return nil }
 
             let poi = item.pointOfInterestCategory
+            if let poi, nonFoodPOIs.contains(poi) { return nil }
+
             let isCafeOrBakery = poi == .cafe || poi == .bakery
             let isGrocery = poi == .foodMarket
 
