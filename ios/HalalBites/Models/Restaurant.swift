@@ -35,7 +35,7 @@ enum CuisineCategory: String, CaseIterable, Identifiable, Codable {
 
     var keywords: [String] {
         switch self {
-        case .mediterranean: return ["mediterranean", "greek", "lebanese"]
+        case .mediterranean: return ["mediterranean", "greek", "lebanese", "middle eastern", "arab", "syrian", "iraqi", "persian", "iranian", "yemeni", "palestinian", "egyptian"]
         case .middleEastern: return ["middle eastern", "arab", "syrian", "iraqi", "persian", "iranian", "yemeni", "palestinian", "egyptian"]
         case .southAsian: return ["pakistani", "indian", "bangladeshi", "south asian", "biryani", "desi"]
         case .turkish: return ["turkish", "kebab", "ottoman"]

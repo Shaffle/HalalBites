@@ -64,12 +64,17 @@ struct ContentView: View {
 
     private var tabContent: some View {
         TabView {
-            ExploreMapView(itineraries: $itineraries, showSideMenu: $showSideMenu, favouriteRestaurantIDs: $favouriteRestaurantIDs, exploreFavouriteRestaurants: $exploreFavouriteRestaurants)
-                .tabItem {
-                    Label("Explore", systemImage: "mappin.and.ellipse")
-                }
+            ExploreView(
+                itineraries: $itineraries,
+                showSideMenu: $showSideMenu,
+                favouriteRestaurantIDs: $favouriteRestaurantIDs,
+                exploreFavouriteRestaurants: $exploreFavouriteRestaurants
+            )
+            .tabItem {
+                Label("Explore", systemImage: "magnifyingglass")
+            }
 
-            ItineraryListView(
+            TripsView(
                 itineraries: $itineraries,
                 showSideMenu: $showSideMenu,
                 favouriteIDs: $favouriteIDs,
@@ -78,9 +83,36 @@ struct ContentView: View {
                 recentlyDeleted: $recentlyDeleted
             )
             .tabItem {
-                Label("Itineraries", systemImage: "map")
+                Label("Trips", systemImage: "list.bullet")
             }
+
+            ExploreMapView(
+                itineraries: $itineraries,
+                showSideMenu: $showSideMenu,
+                favouriteRestaurantIDs: $favouriteRestaurantIDs,
+                exploreFavouriteRestaurants: $exploreFavouriteRestaurants
+            )
+            .tabItem {
+                Label("Map", systemImage: "map")
+            }
+
+            FavouritesView(
+                itineraries: itineraries,
+                archivedItineraries: archivedItineraries,
+                favouriteIDs: $favouriteIDs,
+                favouriteRestaurantIDs: $favouriteRestaurantIDs,
+                exploreFavouriteRestaurants: exploreFavouriteRestaurants
+            )
+            .tabItem {
+                Label("Saved", systemImage: "heart")
+            }
+
+            SettingsView()
+                .tabItem {
+                    Label("Account", systemImage: "person")
+                }
         }
+        .tint(Theme.fg1)
     }
 
     private func restoreItinerary(_ itinerary: Itinerary) {

@@ -1573,7 +1573,7 @@ struct ZabihahBadge: View {
 
     private var label: String {
         switch status {
-        case .zabiha: return "Zabiha \u{2713}"
+        case .zabiha: return "Halal \u{2713}"
         case .fullyHalal: return "Halal \u{2713}"
         case .partiallyHalal: return "Partially Halal \u{26A0}"
         }

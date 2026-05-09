@@ -163,7 +163,7 @@ struct ItineraryDetailView: View {
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .automatic))
-        .background(Color(.systemGroupedBackground))
+        .background(Theme.bgTint)
         .navigationTitle(itinerary.tripName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -366,15 +366,17 @@ struct DayPageView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.s6) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Day \(day.dayNumber)")
-                        .font(.title.bold())
+                        .font(.system(size: Theme.tH1, weight: .bold))
+                        .tracking(-0.4)
+                        .foregroundStyle(Theme.fg1)
                     Text("\(dayName), \(dateString)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(.mono(Theme.tSm))
+                        .foregroundStyle(Theme.fg3)
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, Theme.s5)
 
                 ForEach(Array(day.stops.enumerated()), id: \.element.id) { stopIdx, stop in
                     MealStopCard(
@@ -390,7 +392,7 @@ struct DayPageView: View {
                     SuggestedActivitiesSection(activities: activities)
                 }
             }
-            .padding(.vertical, 16)
+            .padding(.vertical, Theme.s4)
         }
     }
 }
@@ -401,15 +403,17 @@ struct SuggestedActivitiesSection: View {
     let activities: [NearbyActivity]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Theme.s3) {
             HStack(spacing: 6) {
                 Image(systemName: "sparkles")
-                    .foregroundStyle(.purple)
-                    .font(.subheadline)
+                    .foregroundStyle(Theme.pinCultural)
+                    .font(.system(size: 14, weight: .semibold))
                 Text("Suggested Activities")
-                    .font(.subheadline.bold())
+                    .font(.system(size: 14, weight: .bold))
+                    .tracking(0.3)
+                    .foregroundStyle(Theme.fg1)
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, Theme.s5)
 
             ForEach(activities) { activity in
                 ActivityCard(activity: activity)
@@ -422,51 +426,51 @@ struct ActivityCard: View {
     let activity: NearbyActivity
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: activityIcon)
-                    .font(.title3)
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(Color.purple.opacity(0.8))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+        HStack(alignment: .top, spacing: Theme.s3) {
+            Image(systemName: activityIcon)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(Theme.pinCultural, in: RoundedRectangle(cornerRadius: Theme.rSm))
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(activity.name)
-                        .font(.subheadline.bold())
-                    Text(activity.category)
-                        .font(.caption)
-                        .foregroundStyle(.purple)
-                    Text(activity.address)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text("Near \(activity.nearRestaurant)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .italic()
-                }
-
-                Spacer()
-
-                Button {
-                    let placemark = MKPlacemark(coordinate: activity.coordinate)
-                    let mapItem = MKMapItem(placemark: placemark)
-                    mapItem.name = activity.name
-                    mapItem.openInMaps(launchOptions: [
-                        MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
-                    ])
-                } label: {
-                    Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.purple)
-                }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(activity.name)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.fg1)
+                Text(activity.category)
+                    .font(.mono(11))
+                    .foregroundStyle(Theme.pinCultural)
+                Text(activity.address)
+                    .font(.mono(11))
+                    .foregroundStyle(Theme.fg3)
+                Text("Near \(activity.nearRestaurant)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.fg3)
+                    .italic()
             }
-            .padding(14)
+
+            Spacer()
+
+            Button {
+                let placemark = MKPlacemark(coordinate: activity.coordinate)
+                let mapItem = MKMapItem(placemark: placemark)
+                mapItem.name = activity.name
+                mapItem.openInMaps(launchOptions: [
+                    MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                ])
+            } label: {
+                Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(Theme.pinCultural)
+            }
+            .buttonStyle(.plain)
         }
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
-        .padding(.horizontal, 16)
+        .padding(Theme.s3)
+        .background(.white)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.rMd))
+        .shadow(color: Theme.fg1.opacity(0.06), radius: 2, y: 2)
+        .shadow(color: Theme.fg1.opacity(0.10), radius: 12, y: 4)
+        .padding(.horizontal, Theme.s4)
     }
 
     private var activityIcon: String {
@@ -502,10 +506,10 @@ struct MealStopCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             mealHeader
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
+                .padding(.horizontal, Theme.s5)
+                .padding(.bottom, Theme.s2)
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Theme.s3) {
                 recommendationBanner
 
                 if let firstPhoto = stop.restaurant.photoURLs.first {
@@ -516,10 +520,17 @@ struct MealStopCard: View {
                                 .resizable()
                                 .scaledToFill()
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 140)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .frame(height: 150)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.rMd))
                         default:
-                            EmptyView()
+                            RoundedRectangle(cornerRadius: Theme.rMd)
+                                .fill(Theme.mapPaper)
+                                .frame(height: 150)
+                                .overlay {
+                                    Image(systemName: "fork.knife")
+                                        .font(.system(size: 28))
+                                        .foregroundStyle(Theme.fg3.opacity(0.4))
+                                }
                         }
                     }
                 }
@@ -527,23 +538,26 @@ struct MealStopCard: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(stop.restaurant.name)
-                            .font(.headline)
+                            .font(.system(size: 17, weight: .bold))
+                            .tracking(-0.2)
+                            .foregroundStyle(Theme.fg1)
                         Text(stop.restaurant.cuisineType)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(Theme.fg2)
                     }
                     Spacer()
                     openBadge
                 }
 
-                HStack(spacing: 12) {
+                HStack(spacing: Theme.s3) {
                     if stop.restaurant.rating > 0 {
                         HStack(spacing: 3) {
                             Image(systemName: "star.fill")
-                                .foregroundStyle(.yellow)
-                                .font(.caption)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.fg1)
                             Text(String(format: "%.1f", stop.restaurant.rating))
-                                .font(.caption.bold())
+                                .font(.mono(12, weight: .semibold))
+                                .foregroundStyle(Theme.fg1)
                         }
                     }
                     HalalBadge(level: stop.restaurant.halalCertificationLevel)
@@ -553,47 +567,72 @@ struct MealStopCard: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 6) {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                                .font(.caption2)
+                                .foregroundStyle(Theme.warning)
+                                .font(.system(size: 11))
                             if let desc = stop.restaurant.halalDescription, !desc.isEmpty {
                                 Text(desc)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Theme.fg2)
                             }
                         }
                         Text("We still recommend calling in advance to confirm!")
-                            .font(.caption2)
+                            .font(.system(size: 11))
                             .italic()
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Theme.warning)
                     }
-                    .padding(8)
+                    .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.orange.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .background(Theme.warning.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.rSm))
                 }
 
-                Label(stop.restaurant.address, systemImage: "mappin.circle.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                Label {
+                    Text(stop.restaurant.address)
+                        .font(.mono(11))
+                        .foregroundStyle(Theme.fg3)
+                } icon: {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.fg3)
+                }
 
                 if let hours = hoursForDay {
-                    Label(hours, systemImage: "clock")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    Label {
+                        Text(hours)
+                            .font(.mono(11))
+                            .foregroundStyle(Theme.fg3)
+                    } icon: {
+                        Image(systemName: "clock")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.fg3)
+                    }
                 }
 
                 if let travel {
-                    HStack(spacing: 10) {
-                        Label("\(travel.walkingTimeMinutes) min", systemImage: "figure.walk")
-                        Label("\(travel.drivingTimeMinutes) min", systemImage: "car.fill")
+                    HStack(spacing: Theme.s3) {
+                        Label {
+                            Text("\(travel.walkingTimeMinutes) min")
+                                .font(.mono(11))
+                        } icon: {
+                            Image(systemName: "figure.walk")
+                                .font(.system(size: 11))
+                        }
+                        Label {
+                            Text("\(travel.drivingTimeMinutes) min")
+                                .font(.mono(11))
+                        } icon: {
+                            Image(systemName: "car.fill")
+                                .font(.system(size: 11))
+                        }
                         Text("·")
+                            .font(.mono(11))
                         Text(travel.formattedDistance)
+                            .font(.mono(11))
                     }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.fg3)
                 }
 
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.s2) {
                     Button {
                         let placemark = MKPlacemark(coordinate: stop.restaurant.coordinate)
                         let mapItem = MKMapItem(placemark: placemark)
@@ -603,33 +642,44 @@ struct MealStopCard: View {
                         ])
                     } label: {
                         Label("Directions", systemImage: "map.fill")
-                            .font(.caption2.bold())
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Theme.accent, in: Capsule())
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.teal)
+                    .buttonStyle(.plain)
 
                     Button { onDetails() } label: {
                         Label("Details", systemImage: "info.circle.fill")
-                            .font(.caption2.bold())
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundStyle(Theme.pinPhoto)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Theme.pinPhoto.opacity(0.12), in: Capsule())
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.orange)
+                    .buttonStyle(.plain)
 
                     if let onSwap {
                         Button { onSwap() } label: {
                             Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.caption2.bold())
+                                .font(.system(size: 12.5, weight: .semibold))
+                                .foregroundStyle(Theme.fg2)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Theme.bgTint, in: Capsule())
+                                .overlay(Capsule().stroke(Theme.stroke1, lineWidth: 1))
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.secondary)
+                        .buttonStyle(.plain)
                     }
                 }
             }
-            .padding(16)
-            .background(Color(.systemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
-            .padding(.horizontal, 16)
+            .padding(Theme.s4)
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.rCard))
+            .shadow(color: Theme.fg1.opacity(0.06), radius: 2, y: 2)
+            .shadow(color: Theme.fg1.opacity(0.10), radius: 12, y: 4)
+            .padding(.horizontal, Theme.s4)
         }
         .task {
             guard let userLoc = location.currentLocation else { return }
@@ -643,31 +693,34 @@ struct MealStopCard: View {
     private var mealHeader: some View {
         HStack(spacing: 6) {
             Image(systemName: stop.mealType.icon)
-                .foregroundStyle(.teal)
-                .font(.subheadline)
+                .foregroundStyle(Theme.accent)
+                .font(.system(size: 14, weight: .semibold))
             Text(stop.mealType.rawValue.capitalized)
-                .font(.subheadline.bold())
+                .font(.system(size: 14, weight: .bold))
+                .tracking(0.3)
+                .foregroundStyle(Theme.fg1)
         }
     }
 
     private var recommendationBanner: some View {
         HStack(spacing: 8) {
             Image(systemName: recommendation.tier.icon)
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(recommendation.tier.color)
             VStack(alignment: .leading, spacing: 2) {
                 Text(recommendation.tier.rawValue)
-                    .font(.caption.bold())
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(recommendation.tier.color)
                 Text(recommendation.reason)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.fg2)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(10)
+        .padding(Theme.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(recommendation.tier.color.opacity(0.15))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .background(recommendation.tier.color.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.rSm))
     }
 
     @ViewBuilder
@@ -679,20 +732,20 @@ struct MealStopCard: View {
         )
         if let status {
             Text(status.label)
-                .font(.caption2.bold())
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(status.color.opacity(0.2))
-                .foregroundStyle(status.color)
-                .clipShape(Capsule())
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.3)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .foregroundStyle(status == .open ? Theme.accent : (status == .closed ? Theme.danger : Theme.warning))
+                .background((status == .open ? Theme.accent : (status == .closed ? Theme.danger : Theme.warning)).opacity(0.12), in: Capsule())
         } else {
             Text("Open")
-                .font(.caption2.bold())
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.green.opacity(0.2))
-                .foregroundStyle(.green)
-                .clipShape(Capsule())
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.3)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .foregroundStyle(Theme.accent)
+                .background(Theme.accent.opacity(0.12), in: Capsule())
         }
     }
 }
@@ -854,7 +907,7 @@ struct StopDetailSheet: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: Theme.s4) {
                 header
                 addressRow
                 ratingsRow
@@ -864,47 +917,55 @@ struct StopDetailSheet: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                                .font(.subheadline)
+                                .foregroundStyle(Theme.warning)
+                                .font(.system(size: 14))
                             if let desc = restaurant.halalDescription, !desc.isEmpty {
                                 Text(desc)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(Theme.fg2)
                             }
                         }
                         Text("We still recommend calling in advance to confirm!")
-                            .font(.caption)
+                            .font(.system(size: 12))
                             .italic()
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Theme.warning)
                     }
-                    .padding(12)
+                    .padding(Theme.s3)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.orange.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .background(Theme.warning.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.rSm))
                 }
 
                 if let travel {
                     travelSection(travel)
                 }
 
-                Divider()
+                Rectangle()
+                    .fill(Theme.stroke1)
+                    .frame(height: 1)
 
                 photosSection
 
-                Divider()
+                Rectangle()
+                    .fill(Theme.stroke1)
+                    .frame(height: 1)
 
                 aboutSection
 
                 if let yelpData, !yelpData.reviews.isEmpty {
-                    Divider()
+                    Rectangle()
+                        .fill(Theme.stroke1)
+                        .frame(height: 1)
                     reviewsSection(yelpData.reviews)
                 }
 
-                Divider()
+                Rectangle()
+                    .fill(Theme.stroke1)
+                    .frame(height: 1)
 
                 actionButtons
             }
-            .padding(24)
+            .padding(Theme.s6)
         }
         .task {
             await lookUpDetails()
@@ -978,13 +1039,14 @@ struct StopDetailSheet: View {
     }
 
     private func reviewsSection(_ reviews: [YelpReview]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Theme.s3) {
             HStack(spacing: 6) {
                 Text("Reviews")
-                    .font(.headline)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(Theme.fg1)
                 Text("via Yelp")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.mono(11))
+                    .foregroundStyle(Theme.fg3)
             }
 
             ForEach(reviews, id: \.id) { review in
@@ -992,22 +1054,22 @@ struct StopDetailSheet: View {
                     HStack(spacing: 4) {
                         ForEach(0..<review.rating, id: \.self) { _ in
                             Image(systemName: "star.fill")
-                                .font(.caption2)
-                                .foregroundStyle(.yellow)
+                                .font(.system(size: 10))
+                                .foregroundStyle(Theme.fg1)
                         }
                         Spacer()
                         Text(review.user.name)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .font(.mono(11))
+                            .foregroundStyle(Theme.fg3)
                     }
                     Text(review.text)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.fg2)
                         .lineLimit(3)
                 }
-                .padding(10)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(Theme.s3)
+                .background(Theme.bgTint)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.rSm))
             }
         }
     }
@@ -1021,88 +1083,99 @@ struct StopDetailSheet: View {
     }
 
     private func travelSection(_ travel: TravelInfo) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 20) {
-                HStack(spacing: 6) {
-                    Image(systemName: "figure.walk")
-                        .foregroundStyle(.blue)
-                    VStack(alignment: .leading) {
-                        Text("\(travel.walkingTimeMinutes) min")
-                            .font(.subheadline.bold())
-                        Text(travel.formattedDistance)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+        HStack(spacing: Theme.s5) {
+            HStack(spacing: 8) {
+                Image(systemName: "figure.walk")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.info)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(travel.walkingTimeMinutes) min")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Theme.fg1)
+                    Text(travel.formattedDistance)
+                        .font(.mono(11))
+                        .foregroundStyle(Theme.fg3)
                 }
+            }
 
-                HStack(spacing: 6) {
-                    Image(systemName: "car.fill")
-                        .foregroundStyle(.teal)
-                    VStack(alignment: .leading) {
-                        Text("\(travel.drivingTimeMinutes) min")
-                            .font(.subheadline.bold())
-                        Text(travel.formattedDistance)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+            HStack(spacing: 8) {
+                Image(systemName: "car.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(travel.drivingTimeMinutes) min")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Theme.fg1)
+                    Text(travel.formattedDistance)
+                        .font(.mono(11))
+                        .foregroundStyle(Theme.fg3)
                 }
             }
         }
-        .padding(12)
+        .padding(Theme.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .background(Theme.bgTint)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.rSm))
     }
 
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(restaurant.name)
-                    .font(.title2.bold())
+                    .font(.system(size: Theme.tH2, weight: .bold))
+                    .tracking(-0.3)
+                    .foregroundStyle(Theme.fg1)
                 Text(restaurant.cuisineType)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.fg2)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 6) {
                 Text(stop.mealType.rawValue.capitalized)
-                    .font(.caption.bold())
+                    .font(.system(size: 11.5, weight: .bold))
+                    .tracking(0.3)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(.teal.opacity(0.2))
-                    .foregroundStyle(.teal)
-                    .clipShape(Capsule())
+                    .foregroundStyle(Theme.accent)
+                    .background(Theme.accent.opacity(0.12), in: Capsule())
 
                 if let status = OpenStatusHelper.status(for: restaurant.businessHours, mealType: stop.mealType) {
                     Text(status.label)
-                        .font(.caption.bold())
+                        .font(.system(size: 11.5, weight: .bold))
+                        .tracking(0.3)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(status.color.opacity(0.2))
-                        .foregroundStyle(status.color)
-                        .clipShape(Capsule())
+                        .foregroundStyle(status == .open ? Theme.accent : (status == .closed ? Theme.danger : Theme.warning))
+                        .background((status == .open ? Theme.accent : (status == .closed ? Theme.danger : Theme.warning)).opacity(0.12), in: Capsule())
                 }
             }
         }
     }
 
     private var addressRow: some View {
-        Label(restaurant.address, systemImage: "mappin.circle.fill")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+        Label {
+            Text(restaurant.address)
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.fg2)
+        } icon: {
+            Image(systemName: "mappin.circle.fill")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.fg3)
+        }
     }
 
     private var ratingsRow: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: Theme.s4) {
             if restaurant.rating > 0 {
                 HStack(spacing: 4) {
                     Image(systemName: "star.fill")
-                        .foregroundStyle(.yellow)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.fg1)
                     Text(String(format: "%.1f", restaurant.rating))
-                        .font(.subheadline.bold())
+                        .font(.mono(14, weight: .bold))
+                        .foregroundStyle(Theme.fg1)
                 }
             }
-
         }
     }
 
@@ -1112,17 +1185,23 @@ struct StopDetailSheet: View {
     }
 
     private var photosSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Theme.s3) {
             Text("Photos")
-                .font(.headline)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(Theme.fg1)
 
             if allPhotos.isEmpty {
-                Label("No photos available", systemImage: "photo.on.rectangle.angled")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Label {
+                    Text("No photos available")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.fg3)
+                } icon: {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .foregroundStyle(Theme.fg3)
+                }
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: Theme.s3) {
                         ForEach(allPhotos, id: \.absoluteString) { url in
                             AsyncImage(url: url) { phase in
                                 switch phase {
@@ -1131,7 +1210,7 @@ struct StopDetailSheet: View {
                                         .resizable()
                                         .scaledToFill()
                                         .frame(width: 200, height: 150)
-                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .clipShape(RoundedRectangle(cornerRadius: Theme.rMd))
                                 case .failure:
                                     photoPlaceholder
                                 case .empty:
@@ -1149,32 +1228,34 @@ struct StopDetailSheet: View {
     }
 
     private var photoPlaceholder: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(Color(.secondarySystemBackground))
+        RoundedRectangle(cornerRadius: Theme.rMd)
+            .fill(Theme.mapPaper)
             .frame(width: 200, height: 150)
             .overlay {
                 Image(systemName: "photo")
-                    .font(.title2)
-                    .foregroundStyle(.quaternary)
+                    .font(.system(size: 24))
+                    .foregroundStyle(Theme.fg3.opacity(0.4))
             }
     }
 
     private var aboutSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Theme.s3) {
             Text("About")
-                .font(.headline)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(Theme.fg1)
 
             Text(restaurantSummary)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.fg2)
 
             if let notes = stop.notes {
                 HStack(spacing: 8) {
                     Image(systemName: "fork.knife")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Theme.pinPhoto)
                     Text(notes)
-                        .font(.subheadline)
+                        .font(.system(size: 13))
                         .italic()
+                        .foregroundStyle(Theme.fg2)
                 }
             }
         }
@@ -1199,8 +1280,8 @@ struct StopDetailSheet: View {
     }
 
     private var actionButtons: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(spacing: Theme.s2) {
+            HStack(spacing: Theme.s2) {
                 Button {
                     let placemark = MKPlacemark(coordinate: restaurant.coordinate)
                     let mapItem = MKMapItem(placemark: placemark)
@@ -1210,10 +1291,13 @@ struct StopDetailSheet: View {
                     ])
                 } label: {
                     Label("Directions", systemImage: "map.fill")
-                        .font(.subheadline)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Theme.accent, in: Capsule())
                 }
-                .buttonStyle(.bordered)
-                .tint(.teal)
+                .buttonStyle(.plain)
 
                 if let phone = phoneNumber {
                     Button {
@@ -1223,16 +1307,19 @@ struct StopDetailSheet: View {
                         }
                     } label: {
                         Label("Call", systemImage: "phone.fill")
-                            .font(.subheadline)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.success)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Theme.success.opacity(0.12), in: Capsule())
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.green)
+                    .buttonStyle(.plain)
                 } else if loadingPhone {
                     ProgressView()
                 }
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.s2) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         if favouriteRestaurantIDs.contains(restaurant.id) {
@@ -1246,10 +1333,13 @@ struct StopDetailSheet: View {
                         favouriteRestaurantIDs.contains(restaurant.id) ? "Favourited" : "Favourite",
                         systemImage: favouriteRestaurantIDs.contains(restaurant.id) ? "heart.fill" : "heart"
                     )
-                    .font(.subheadline)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.danger)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Theme.danger.opacity(0.12), in: Capsule())
                 }
-                .buttonStyle(.bordered)
-                .tint(.pink)
+                .buttonStyle(.plain)
             }
         }
     }
@@ -1295,10 +1385,10 @@ struct HalalBadge: View {
 
     private var color: Color {
         switch level {
-        case .halal: return .green
-        case .partiallyHalal: return .orange
-        case .vegetarian: return .orange
-        case .vegan: return .purple
+        case .halal: return Theme.pinCertified
+        case .partiallyHalal: return Theme.warning
+        case .vegetarian: return Theme.pinPhoto
+        case .vegan: return Theme.pinCultural
         }
     }
 
@@ -1312,9 +1402,14 @@ struct HalalBadge: View {
     }
 
     var body: some View {
-        Label(level.description, systemImage: icon)
-            .font(.caption.bold())
-            .foregroundStyle(color)
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+            Text(level.description)
+                .font(.system(size: 11.5, weight: .semibold))
+                .tracking(0.3)
+        }
+        .foregroundStyle(color)
     }
 }
 

@@ -35,9 +35,9 @@ struct ZabihahRestaurant: Identifiable, Hashable {
 
     var certificationLabel: String {
         switch halalStatus {
-        case .zabiha: return "Zabiha Certified"
-        case .partiallyHalal: return "Partially Halal"
-        case .fullyHalal: return "Halal Certified"
+        case .zabiha: return "Halal"
+        case .partiallyHalal: return "Partially-Halal"
+        case .fullyHalal: return "Halal"
         }
     }
 
@@ -49,11 +49,14 @@ struct ZabihahRestaurant: Identifiable, Hashable {
         }
     }
 
-    private static let cafeKeywords = ["cafe", "café", "coffee", "bakery", "tea", "pastry", "dessert", "sweets", "donut", "doughnut", "juice", "smoothie"]
+    private static let cafeNameKeywords = ["cafe", "café", "coffee", "espresso", "roastery", "bakery", "bakeshop", "patisserie", "tea", "boba", "pastry", "dessert", "sweets", "donut", "doughnut", "juice", "smoothie", "ice cream", "gelato"]
+    private static let cafeCuisineKeywords = ["cafe", "café", "coffee", "bakery", "tea", "dessert", "juice", "smoothie"]
 
     var isCafe: Bool {
-        let lower = (name + " " + cuisineType).lowercased()
-        return Self.cafeKeywords.contains { lower.contains($0) }
+        let lowerName = name.lowercased()
+        let lowerCuisine = cuisineType.lowercased()
+        return Self.cafeNameKeywords.contains { lowerName.contains($0) }
+            || Self.cafeCuisineKeywords.contains { lowerCuisine == $0 || lowerCuisine.contains("\($0),") || lowerCuisine.contains(", \($0)") }
     }
 
     private static let excludedChains = ["starbucks", "dunkin", "mcdonalds", "subway", "burger king", "carls jr.", "wendy's", "pizza hut", "chipotle", "taco bell", "red lobster", "jack in the box", "kfc", "costco"]
@@ -61,6 +64,25 @@ struct ZabihahRestaurant: Identifiable, Hashable {
     var isExcludedChain: Bool {
         let lower = name.lowercased()
         return Self.excludedChains.contains { lower.contains($0) }
+    }
+
+    func withPhotoURLs(_ urls: [URL]) -> ZabihahRestaurant {
+        ZabihahRestaurant(
+            id: id,
+            name: name,
+            address: address,
+            latitude: latitude,
+            longitude: longitude,
+            cuisineType: cuisineType,
+            zabiha: zabiha,
+            rating: rating,
+            reviewCount: reviewCount,
+            halalDescription: halalDescription,
+            isRestaurant: isRestaurant,
+            halalStatus: halalStatus,
+            photoURLs: urls,
+            businessHours: businessHours
+        )
     }
 }
 
@@ -122,7 +144,40 @@ class ZabihahService {
                 merged.append(restaurant)
             }
         }
-        return merged.isEmpty ? Self.mockRestaurants(near: latitude, longitude: longitude) : merged
+        let results = merged.isEmpty ? Self.mockRestaurants(near: latitude, longitude: longitude) : merged
+        return await Self.fillMissingYelpPhotos(in: results)
+    }
+
+    private static func fillMissingYelpPhotos(in restaurants: [ZabihahRestaurant]) async -> [ZabihahRestaurant] {
+        guard YelpService.shared.isConfigured else { return restaurants }
+
+        let targetIndexes = restaurants.indices.filter {
+            restaurants[$0].photoURLs.isEmpty && restaurants[$0].isRestaurant
+        }.prefix(16)
+
+        guard !targetIndexes.isEmpty else { return restaurants }
+
+        var updated = restaurants
+        await withTaskGroup(of: (Int, [URL]).self) { group in
+            for index in targetIndexes {
+                let restaurant = restaurants[index]
+                group.addTask {
+                    let urls = await YelpService.shared.fetchPhotoURLs(
+                        name: restaurant.name,
+                        address: restaurant.address,
+                        latitude: restaurant.latitude,
+                        longitude: restaurant.longitude
+                    )
+                    return (index, urls)
+                }
+            }
+
+            for await (index, urls) in group where !urls.isEmpty {
+                updated[index] = updated[index].withPhotoURLs(urls)
+            }
+        }
+
+        return updated
     }
 
     private static func fetchScraplingRestaurants(latitude: Double, longitude: Double) async -> [ZabihahRestaurant] {
@@ -230,7 +285,7 @@ class ZabihahService {
                 cuisineType = "Restaurant"
             }
 
-            let halalStatus: ZabihahHalalStatus = isCafe ? .partiallyHalal : .fullyHalal
+            let halalStatus: ZabihahHalalStatus = .fullyHalal
 
             return ZabihahRestaurant(
                 id: "apple-\(name.hashValue)-\(coord.latitude)",
@@ -242,7 +297,7 @@ class ZabihahService {
                 zabiha: false,
                 rating: nil,
                 reviewCount: 0,
-                halalDescription: isCafe ? nil : "Verify halal status",
+                halalDescription: "Verify halal status",
                 isRestaurant: !(isGrocery || isGroceryByName),
                 halalStatus: halalStatus,
                 photoURLs: [],

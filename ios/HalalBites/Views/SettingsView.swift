@@ -2,7 +2,6 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("distanceUnit") private var distanceUnit = "miles"
     @AppStorage("searchRadius") private var searchRadius = 10.0
     @AppStorage("notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("showClosedPlaces") private var showClosedPlaces = false
@@ -15,13 +14,8 @@ struct SettingsView: View {
                 Section("Location") {
                     Toggle("Auto-detect location", isOn: $autoDetectLocation)
 
-                    Picker("Distance unit", selection: $distanceUnit) {
-                        Text("Miles").tag("miles")
-                        Text("Kilometres").tag("km")
-                    }
-
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Search radius: \(Int(searchRadius)) \(distanceUnit == "miles" ? "mi" : "km")")
+                        Text("Search radius: \(Int(searchRadius)) mi")
                         Slider(value: $searchRadius, in: 1...50, step: 1)
                             .tint(.teal)
                     }
