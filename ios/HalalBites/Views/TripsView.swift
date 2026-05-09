@@ -11,6 +11,10 @@ struct TripsView: View {
     @State private var segment: TripSegment = .all
     @State private var showGenerator = false
     @State private var selectedItinerary: Itinerary?
+    @State private var shareTrip: Itinerary?
+    @State private var shareText: String?
+    @State private var isUploading = false
+    @AppStorage("profileName") private var profileName = ""
 
     enum TripSegment: String, CaseIterable {
         case all = "Trips"
@@ -56,6 +60,11 @@ struct TripsView: View {
                 itinerary: binding(for: itinerary),
                 favouriteRestaurantIDs: $favouriteRestaurantIDs
             )
+        }
+        .sheet(isPresented: Binding(get: { shareText != nil }, set: { if !$0 { shareText = nil } })) {
+            if let text = shareText, let trip = shareTrip {
+                ShareSheet(items: [ShareItemWithPreview(text: text, title: "\(profileName) has shared \(trip.tripName) with you!")])
+            }
         }
     }
 
@@ -141,6 +150,14 @@ struct TripsView: View {
                     ActiveTripCard(trip: trip) {
                         selectedItinerary = trip
                     }
+                    .tripContextMenu(
+                        trip: trip,
+                        isFavourite: favouriteIDs.contains(trip.id),
+                        onFavourite: { toggleFavourite(trip) },
+                        onShare: { Task { await shareTrip(trip) } },
+                        onArchive: { archiveTrip(trip) },
+                        onDelete: { deleteTrip(trip) }
+                    )
                     .padding(.horizontal, Theme.s4)
                     .padding(.top, 18)
                 }
@@ -157,6 +174,14 @@ struct TripsView: View {
                         TripCardView(trip: trip, muted: true) {
                             selectedItinerary = trip
                         }
+                        .tripContextMenu(
+                            trip: trip,
+                            isFavourite: favouriteIDs.contains(trip.id),
+                            onFavourite: { toggleFavourite(trip) },
+                            onShare: { Task { await shareTrip(trip) } },
+                            onArchive: { archiveTrip(trip) },
+                            onDelete: { deleteTrip(trip) }
+                        )
                         .padding(.horizontal, Theme.s4)
                     }
                 }
@@ -168,6 +193,47 @@ struct TripsView: View {
 
             Spacer().frame(height: 110)
         }
+    }
+
+    // MARK: - Swipe Actions
+
+    private func deleteTrip(_ trip: Itinerary) {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            itineraries.removeAll { $0.id == trip.id }
+            favouriteIDs.remove(trip.id)
+            if !recentlyDeleted.contains(where: { $0.id == trip.id }) {
+                recentlyDeleted.insert(trip, at: 0)
+            }
+        }
+    }
+
+    private func archiveTrip(_ trip: Itinerary) {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            itineraries.removeAll { $0.id == trip.id }
+            if !archivedItineraries.contains(where: { $0.id == trip.id }) {
+                archivedItineraries.insert(trip, at: 0)
+            }
+        }
+    }
+
+    private func toggleFavourite(_ trip: Itinerary) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if favouriteIDs.contains(trip.id) {
+                favouriteIDs.remove(trip.id)
+            } else {
+                favouriteIDs.insert(trip.id)
+            }
+        }
+    }
+
+    private func shareTrip(_ trip: Itinerary) async {
+        isUploading = true
+        defer { isUploading = false }
+        do {
+            let code = try await CloudKitShareService.upload(trip, profileName: profileName)
+            shareTrip = trip
+            shareText = ItineraryShareManager.shareText(for: code, profileName: profileName, tripName: trip.tripName)
+        } catch {}
     }
 
     // MARK: - Plan Trip CTA
@@ -512,6 +578,50 @@ struct TripCardView: View {
                 .position(x: 44, y: 92)
             PinDot(.certified, size: 18)
                 .position(x: 90, y: 110)
+        }
+    }
+}
+
+// MARK: - Trip Context Menu
+
+extension View {
+    func tripContextMenu(
+        trip: Itinerary,
+        isFavourite: Bool,
+        onFavourite: @escaping () -> Void,
+        onShare: @escaping () -> Void,
+        onArchive: @escaping () -> Void,
+        onDelete: @escaping () -> Void
+    ) -> some View {
+        self.contextMenu {
+            Button {
+                onFavourite()
+            } label: {
+                Label(
+                    isFavourite ? "Unfavourite" : "Favourite",
+                    systemImage: isFavourite ? "heart.slash" : "heart"
+                )
+            }
+
+            Button {
+                onShare()
+            } label: {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+
+            Button {
+                onArchive()
+            } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
         }
     }
 }

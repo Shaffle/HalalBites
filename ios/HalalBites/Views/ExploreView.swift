@@ -16,6 +16,9 @@ struct ExploreView: View {
     @State private var selectedRestaurant: ZabihahRestaurant?
     @State private var isLoading = true
     @State private var coffeeShops: [ZabihahRestaurant] = []
+    @State private var showLocationPicker = false
+    @State private var customLocation: CLLocation?
+    @State private var locationLabel = "Your location"
 
     private var certifiedRestaurants: [ZabihahRestaurant] {
         restaurants.filter { !$0.isExcludedChain && $0.isRestaurant && $0.halalStatus != .partiallyHalal }
@@ -108,6 +111,21 @@ struct ExploreView: View {
             }
         }
         .task { await loadData() }
+        .sheet(isPresented: $showLocationPicker) {
+            LocationPickerSheet(
+                onSelect: { name, loc in
+                    customLocation = loc
+                    locationLabel = name
+                    Task { await loadData() }
+                },
+                onReset: {
+                    customLocation = nil
+                    locationLabel = "Your location"
+                    Task { await loadData() }
+                }
+            )
+            .presentationDetents([.medium])
+        }
         .sheet(item: $selectedRestaurant) { restaurant in
             RestaurantDetailSheet(
                 restaurant: restaurant,
@@ -139,31 +157,36 @@ struct ExploreView: View {
     }
 
     private var addressBar: some View {
-        HStack(spacing: 10) {
-            Circle()
-                .fill(Theme.pinCertified)
-                .frame(width: 26, height: 26)
-                .overlay {
-                    Image(systemName: "location.fill")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                }
+        Button {
+            showLocationPicker = true
+        } label: {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(Theme.pinCertified)
+                    .frame(width: 26, height: 26)
+                    .overlay {
+                        Image(systemName: customLocation != nil ? "mappin.circle.fill" : "location.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text("SEARCHING NEAR")
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(Theme.fg3)
-                    .tracking(0.8)
-                Text(location.currentLocation != nil ? "Your location" : "Locating...")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.fg1)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("SEARCHING NEAR")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(Theme.fg3)
+                        .tracking(0.8)
+                    Text(location.currentLocation != nil || customLocation != nil ? locationLabel : "Locating...")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.fg1)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.fg2)
             }
-            Spacer()
-            Image(systemName: "chevron.down")
-                .font(.system(size: 14))
-                .foregroundStyle(Theme.fg2)
         }
+        .buttonStyle(.plain)
         .padding(.horizontal, Theme.s4)
         .padding(.vertical, 6)
     }
@@ -551,7 +574,17 @@ struct ExploreView: View {
     // MARK: - Data
 
     private func loadData() async {
-        let loc: CLLocation? = location.currentLocation != nil ? location.currentLocation : await waitForLocation()
+        isLoading = true
+        let loc: CLLocation?
+        if let custom = customLocation {
+            loc = custom
+        } else {
+            if let existing = location.currentLocation {
+                loc = existing
+            } else {
+                loc = await waitForLocation()
+            }
+        }
         guard let loc else {
             isLoading = false
             return
@@ -1073,3 +1106,152 @@ private struct RestaurantDetailSheet: View {
         )
     }
 }
+
+// MARK: - Location Picker Sheet
+
+struct LocationPickerSheet: View {
+    let onSelect: (String, CLLocation) -> Void
+    let onReset: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @State private var completions: [MKLocalSearchCompletion] = []
+    @State private var completer = LocationCompleterDelegate()
+    @State private var isSearching = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(Theme.fg2)
+                    TextField("Search city or country", text: $query)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Theme.fg1)
+                        .autocorrectionDisabled()
+                        .submitLabel(.search)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(Theme.mapPaper, in: Capsule())
+                .padding(.horizontal, Theme.s4)
+                .padding(.top, Theme.s3)
+
+                List {
+                    Button {
+                        dismiss()
+                        onReset()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 32, height: 32)
+                                .background(Theme.pinCertified, in: Circle())
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Use my current location")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(Theme.fg1)
+                                Text("GPS location")
+                                    .font(.mono(11))
+                                    .foregroundStyle(Theme.fg3)
+                            }
+                        }
+                    }
+
+                    ForEach(completions, id: \.self) { completion in
+                        HStack(spacing: 12) {
+                            Image(systemName: "mappin.circle.fill")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 32, height: 32)
+                                .background(Theme.info, in: Circle())
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(completion.title)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(Theme.fg1)
+                                if !completion.subtitle.isEmpty {
+                                    Text(completion.subtitle)
+                                        .font(.mono(11))
+                                        .foregroundStyle(Theme.fg3)
+                                }
+                            }
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectCompletion(completion)
+                        }
+                    }
+
+                    if isSearching {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
+                    }
+                }
+                .listStyle(.plain)
+            }
+            .navigationTitle("Change Location")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+        .onAppear {
+            completer.onUpdate = { results in
+                completions = results
+            }
+        }
+        .onChange(of: query) { _, newValue in
+            completer.search(query: newValue)
+        }
+    }
+
+    private func selectCompletion(_ completion: MKLocalSearchCompletion) {
+        isSearching = true
+        let request = MKLocalSearch.Request(completion: completion)
+        let search = MKLocalSearch(request: request)
+        Task {
+            guard let response = try? await search.start(),
+                  let item = response.mapItems.first else {
+                isSearching = false
+                return
+            }
+            let coord = item.placemark.coordinate
+            let name = completion.title
+            await MainActor.run {
+                dismiss()
+                onSelect(name, CLLocation(latitude: coord.latitude, longitude: coord.longitude))
+            }
+        }
+    }
+}
+
+@Observable
+class LocationCompleterDelegate: NSObject, MKLocalSearchCompleterDelegate {
+    private let completer = MKLocalSearchCompleter()
+    var onUpdate: (([MKLocalSearchCompletion]) -> Void)?
+
+    override init() {
+        super.init()
+        completer.delegate = self
+        completer.resultTypes = .address
+    }
+
+    func search(query: String) {
+        completer.queryFragment = query
+    }
+
+    func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
+        onUpdate?(completer.results)
+    }
+
+    func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {}
+}
+
