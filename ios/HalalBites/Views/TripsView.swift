@@ -1,4 +1,6 @@
 import SwiftUI
+import MapKit
+import CoreLocation
 
 struct TripsView: View {
     @Binding var itineraries: [Itinerary]
@@ -305,22 +307,25 @@ struct ActiveTripCard: View {
         Button(action: onTap) {
             VStack(spacing: 0) {
                 ZStack(alignment: .bottomLeading) {
-                    RoundedRectangle(cornerRadius: 22)
-                        .fill(Theme.mapPaper2)
-                        .frame(height: 168)
-                        .overlay {
-                            LinearGradient(
-                                colors: [Theme.fg1.opacity(0.18), Theme.fg1.opacity(0.78)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        }
-                        .clipShape(
-                            UnevenRoundedRectangle(
-                                topLeadingRadius: 22, bottomLeadingRadius: 0,
-                                bottomTrailingRadius: 0, topTrailingRadius: 22
-                            )
+                    LandmarkBackground(
+                        city: trip.city,
+                        country: trip.country,
+                        size: CGSize(width: 400, height: 168)
+                    )
+                    .frame(height: 168)
+                    .overlay {
+                        LinearGradient(
+                            colors: [.black.opacity(0.15), .black.opacity(0.65)],
+                            startPoint: .top,
+                            endPoint: .bottom
                         )
+                    }
+                    .clipShape(
+                        UnevenRoundedRectangle(
+                            topLeadingRadius: 22, bottomLeadingRadius: 0,
+                            bottomTrailingRadius: 0, topTrailingRadius: 22
+                        )
+                    )
 
                     VStack(alignment: .leading, spacing: 0) {
                         HStack {
@@ -466,12 +471,20 @@ struct TripCardView: View {
         Button(action: onTap) {
             HStack(spacing: 0) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 0)
-                        .fill(Theme.mapPaper2)
-                        .frame(width: 116, height: 132)
-                        .overlay {
-                            miniPinCluster
-                        }
+                    LandmarkBackground(
+                        city: trip.city,
+                        country: trip.country,
+                        size: CGSize(width: 116, height: 132)
+                    )
+                    .frame(width: 116, height: 132)
+                    .overlay {
+                        LinearGradient(
+                            colors: [.black.opacity(0.1), .black.opacity(0.35)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
+                    .clipped()
 
                     VStack {
                         HStack {
@@ -622,6 +635,95 @@ extension View {
             } label: {
                 Label("Delete", systemImage: "trash")
             }
+        }
+    }
+}
+
+// MARK: - Landmark Image Cache
+
+actor LandmarkImageCache {
+    static let shared = LandmarkImageCache()
+
+    private var cache: [String: UIImage] = [:]
+    private var inFlight: [String: Task<UIImage?, Never>] = [:]
+
+    func loadImage(city: String, country: String, size: CGSize) async -> UIImage? {
+        let key = "\(city)-\(country)".lowercased()
+
+        if let cached = cache[key] { return cached }
+
+        if let existing = inFlight[key] {
+            return await existing.value
+        }
+
+        let task = Task<UIImage?, Never> {
+            guard let coord = await Self.findLandmark(city: city, country: country) else { return nil }
+
+            let camera = MKMapCamera(
+                lookingAtCenter: coord,
+                fromDistance: 1500,
+                pitch: 55,
+                heading: 0
+            )
+            let options = MKMapSnapshotter.Options()
+            options.preferredConfiguration = MKImageryMapConfiguration(elevationStyle: .realistic)
+            options.camera = camera
+            options.size = size
+
+            return (try? await MKMapSnapshotter(options: options).start())?.image
+        }
+
+        inFlight[key] = task
+        let image = await task.value
+        inFlight[key] = nil
+        if let image { cache[key] = image }
+        return image
+    }
+
+    private static func findLandmark(city: String, country: String) async -> CLLocationCoordinate2D? {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = "\(city) famous landmark"
+        request.resultTypes = .pointOfInterest
+
+        if let response = try? await MKLocalSearch(request: request).start(),
+           let first = response.mapItems.first {
+            return first.placemark.coordinate
+        }
+
+        if let placemarks = try? await CLGeocoder().geocodeAddressString("\(city), \(country)"),
+           let loc = placemarks.first?.location {
+            return loc.coordinate
+        }
+
+        return nil
+    }
+}
+
+// MARK: - Landmark Background
+
+struct LandmarkBackground: View {
+    let city: String
+    let country: String
+    let size: CGSize
+
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Theme.mapPaper2
+            }
+        }
+        .task {
+            image = await LandmarkImageCache.shared.loadImage(
+                city: city,
+                country: country,
+                size: CGSize(width: size.width * 2, height: size.height * 2)
+            )
         }
     }
 }

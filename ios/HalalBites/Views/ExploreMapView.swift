@@ -243,6 +243,8 @@ struct ExploreMapView: View {
     @State private var hasInitiallyLoaded = false
     @State private var mapCenter = CLLocationCoordinate2D(latitude: 33.3062, longitude: -111.8413)
     @State private var exploreLoadGeneration = UUID()
+    @State private var showFavouritesOnMap = false
+    @State private var selectedFavourite: Restaurant?
 
     private var selectedRestaurant: ZabihahRestaurant? {
         restaurants.first { $0.id == selectedID }
@@ -310,6 +312,14 @@ struct ExploreMapView: View {
                     Annotation(place.name, coordinate: place.coordinate, anchor: .bottom) {
                         ExplorePlaceMapPin(icon: place.icon, placeType: place.placeType)
                             .onTapGesture { selectedPlace = place }
+                    }
+                }
+                if showFavouritesOnMap {
+                    ForEach(exploreFavouriteRestaurants) { fav in
+                        Annotation(fav.name, coordinate: fav.coordinate, anchor: .bottom) {
+                            FavouriteMapPin()
+                                .onTapGesture { selectedFavourite = fav }
+                        }
                     }
                 }
             }
@@ -392,6 +402,10 @@ struct ExploreMapView: View {
             ExplorePlaceSheet(place: place)
                 .presentationDetents([.medium])
         }
+        .sheet(item: $selectedFavourite) { fav in
+            FavouriteDetailSheet(restaurant: fav, itineraries: $itineraries, favouriteRestaurantIDs: $favouriteRestaurantIDs, exploreFavouriteRestaurants: $exploreFavouriteRestaurants)
+                .presentationDetents([.medium])
+        }
     }
 
     // MARK: - Search Bar
@@ -401,17 +415,17 @@ struct ExploreMapView: View {
             HStack(spacing: 10) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.25)) {
-                        showSideMenu = true
+                        showFavouritesOnMap.toggle()
                     }
                 } label: {
-                    Image(systemName: "line.3.horizontal")
+                    Image(systemName: showFavouritesOnMap ? "heart.fill" : "heart")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Theme.fg1)
+                        .foregroundStyle(showFavouritesOnMap ? .pink : Theme.fg1)
                         .frame(width: 40, height: 40)
-                        .background(Theme.mapPaper, in: RoundedRectangle(cornerRadius: Theme.rSm))
+                        .background(showFavouritesOnMap ? Color.pink.opacity(0.12) : Theme.mapPaper, in: RoundedRectangle(cornerRadius: Theme.rSm))
                         .overlay(
                             RoundedRectangle(cornerRadius: Theme.rSm)
-                                .stroke(Theme.stroke1, lineWidth: 1)
+                                .stroke(showFavouritesOnMap ? Color.pink.opacity(0.3) : Theme.stroke1, lineWidth: 1)
                         )
                 }
                 .buttonStyle(.plain)
@@ -1103,29 +1117,40 @@ struct ExploreMapView: View {
             span: MKCoordinateSpan(latitudeDelta: 0.35, longitudeDelta: 0.35)
         )
 
-        var items = await searchMapItems(query: query, region: region, poiCategories: poiCategories)
-        if items.isEmpty {
-            items = await searchMapItems(query: query, region: expandedRegion, poiCategories: poiCategories)
-        }
-        if items.isEmpty && !poiCategories.isEmpty {
-            items = await searchMapItems(query: query, region: region, poiCategories: [])
-        }
-        if items.isEmpty && !poiCategories.isEmpty {
-            items = await searchMapItems(query: query, region: expandedRegion, poiCategories: [])
+        async let poiResults = searchPOIByCategory(region: region, poiCategories: poiCategories)
+        async let nlResults = searchMapItems(query: query, region: region)
+        var combined = await poiResults + nlResults
+
+        if combined.isEmpty {
+            async let poiExpanded = searchPOIByCategory(region: expandedRegion, poiCategories: poiCategories)
+            async let nlExpanded = searchMapItems(query: query, region: expandedRegion)
+            combined = await poiExpanded + nlExpanded
         }
 
-        return mapItemsToExplorePlaces(items, type: type, query: query, icon: icon)
+        var seen: Set<String> = []
+        let deduped = combined.filter { item in
+            guard let name = item.name?.lowercased() else { return false }
+            guard !seen.contains(name) else { return false }
+            seen.insert(name)
+            return true
+        }
+
+        return mapItemsToExplorePlaces(deduped, type: type, query: query, icon: icon)
     }
 
-    private func searchMapItems(query: String, region: MKCoordinateRegion, poiCategories: [MKPointOfInterestCategory]) async -> [MKMapItem] {
+    private func searchPOIByCategory(region: MKCoordinateRegion, poiCategories: [MKPointOfInterestCategory]) async -> [MKMapItem] {
+        guard !poiCategories.isEmpty else { return [] }
+        let request = MKLocalPointsOfInterestRequest(coordinateRegion: region)
+        request.pointOfInterestFilter = MKPointOfInterestFilter(including: poiCategories)
+        let search = MKLocalSearch(request: request)
+        return (try? await search.start())?.mapItems ?? []
+    }
+
+    private func searchMapItems(query: String, region: MKCoordinateRegion) async -> [MKMapItem] {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
         request.region = region
         request.resultTypes = .pointOfInterest
-        if !poiCategories.isEmpty {
-            request.pointOfInterestFilter = MKPointOfInterestFilter(including: poiCategories)
-        }
-
         return (try? await MKLocalSearch(request: request).start())?.mapItems ?? []
     }
 
@@ -1180,9 +1205,8 @@ struct HalalMapPin: View {
                 .fill(Color.teal)
                 .frame(width: 36, height: 36)
                 .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
-            Image(systemName: "fork.knife")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white)
+            Text("🍽️")
+                .font(.system(size: 18))
         }
         .overlay(alignment: .bottom) {
             Triangle()
@@ -1204,9 +1228,8 @@ struct CafeMapPin: View {
                 .fill(pinColor)
                 .frame(width: 36, height: 36)
                 .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-            Image(systemName: "cup.and.saucer.fill")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white)
+            Text("☕")
+                .font(.system(size: 18))
         }
         .overlay(alignment: .bottom) {
             Triangle()
@@ -1228,9 +1251,8 @@ struct DessertMapPin: View {
                 .fill(pinColor)
                 .frame(width: 36, height: 36)
                 .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-            Image(systemName: "birthday.cake.fill")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white)
+            Text("🍰")
+                .font(.system(size: 18))
         }
         .overlay(alignment: .bottom) {
             Triangle()
@@ -1252,9 +1274,8 @@ struct GroceryMapPin: View {
                 .fill(pinColor)
                 .frame(width: 36, height: 36)
                 .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-            Image(systemName: "cart.fill")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white)
+            Text("🛒")
+                .font(.system(size: 18))
         }
         .overlay(alignment: .bottom) {
             Triangle()
@@ -1274,13 +1295,33 @@ struct MosqueMapPin: View {
                 .fill(Color.green)
                 .frame(width: 36, height: 36)
                 .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
-            Image(systemName: "moon.fill")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white)
+            Text("🕌")
+                .font(.system(size: 18))
         }
         .overlay(alignment: .bottom) {
             Triangle()
                 .fill(Color.green)
+                .frame(width: 10, height: 7)
+                .offset(y: 7)
+        }
+    }
+}
+
+// MARK: - Favourite Map Pin
+
+struct FavouriteMapPin: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.pink)
+                .frame(width: 36, height: 36)
+                .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+            Text("❤️")
+                .font(.system(size: 18))
+        }
+        .overlay(alignment: .bottom) {
+            Triangle()
+                .fill(Color.pink)
                 .frame(width: 10, height: 7)
                 .offset(y: 7)
         }
@@ -1351,34 +1392,33 @@ struct ZabihahRestaurantSheet: View {
     @State private var photoURLs: [URL] = []
     @State private var loadingPhotos = false
 
+    private var isFavourited: Bool {
+        favouriteRestaurantIDs.contains(stableRestaurantID)
+    }
+
+    private var openStatusText: String {
+        if let status = OpenStatusHelper.status(for: restaurant.businessHours) {
+            return status.label
+        }
+        return "Open"
+    }
+
+    private var openStatusColor: Color {
+        if let status = OpenStatusHelper.status(for: restaurant.businessHours) {
+            return status.color
+        }
+        return Theme.pinCertified
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                header
-                addressRow
-                ratingsRow
-                if !restaurant.isCafe && !restaurant.isDessertShop && restaurant.isRestaurant {
-                    halalBadge
-                }
-
-                if let travel {
-                    travelSection(travel)
-                }
-
-                Divider()
-
-                photosSection
-
-                Divider()
-
-                aboutSection
-
-                Divider()
-
-                actionButtons
+            VStack(alignment: .leading, spacing: 0) {
+                heroImage
+                bodyContent
             }
-            .padding(24)
         }
+        .background(Theme.bg)
+        .overlay(alignment: .bottom) { bottomBar }
         .task { await lookUpDetails() }
         .task { await loadTravel() }
         .task { await loadPhotos() }
@@ -1393,157 +1433,177 @@ struct ZabihahRestaurantSheet: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Hero
 
-    private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(restaurant.name)
-                    .font(.title2.bold())
-                Text(restaurant.cuisineType)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 6) {
-                if !restaurant.isCafe && !restaurant.isDessertShop && restaurant.isRestaurant {
-                    ZabihahBadge(status: restaurant.halalStatus)
+    private var heroImage: some View {
+        ZStack(alignment: .topLeading) {
+            Rectangle()
+                .fill(Theme.mapPaper)
+                .frame(height: 260)
+                .overlay {
+                    if let url = photoURLs.first {
+                        AsyncImage(url: url) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            Theme.mapPaper
+                        }
+                        .frame(height: 260)
+                        .clipped()
+                    } else if loadingPhotos {
+                        VStack(spacing: 10) {
+                            ProgressView()
+                            Text("Loading…")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Theme.fg3)
+                        }
+                    } else {
+                        Image(systemName: restaurant.isDessertShop ? "birthday.cake.fill" : restaurant.isCafe ? "cup.and.saucer.fill" : "fork.knife")
+                            .font(.system(size: 48))
+                            .foregroundStyle(Theme.fg4)
+                    }
                 }
+                .clipped()
 
-                if let status = OpenStatusHelper.status(for: restaurant.businessHours) {
-                    Text(status.label)
-                        .font(.caption.bold())
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(status.color.opacity(0.2))
-                        .foregroundStyle(status.color)
-                        .clipShape(Capsule())
-                } else {
-                    Text("Open")
-                        .font(.caption.bold())
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.green.opacity(0.2))
-                        .foregroundStyle(.green)
-                        .clipShape(Capsule())
+            LinearGradient(
+                colors: [.black.opacity(0.3), .clear, .clear, .black.opacity(0.5)],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: 260)
+
+            VStack {
+                Spacer()
+                HStack {
+                    if !restaurant.isCafe && !restaurant.isDessertShop && restaurant.isRestaurant {
+                        CertBadge(status: restaurant.halalStatus)
+                    }
+                    Spacer()
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            let rid = stableRestaurantID
+                            if favouriteRestaurantIDs.contains(rid) {
+                                favouriteRestaurantIDs.remove(rid)
+                                exploreFavouriteRestaurants.removeAll { $0.id == rid }
+                            } else {
+                                favouriteRestaurantIDs.insert(rid)
+                                if !exploreFavouriteRestaurants.contains(where: { $0.id == rid }) {
+                                    exploreFavouriteRestaurants.append(restaurantFromZabihah)
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: isFavourited ? "heart.fill" : "heart")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(isFavourited ? .pink : .white)
+                            .frame(width: 36, height: 36)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .buttonStyle(.plain)
                 }
+                .padding(14)
             }
+            .frame(height: 260)
         }
     }
 
-    private var addressRow: some View {
-        Label(restaurant.address, systemImage: "mappin.circle.fill")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+    // MARK: - Body
+
+    private var bodyContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(restaurant.name)
+                .font(.system(size: 24, weight: .bold))
+                .tracking(-0.4)
+                .foregroundStyle(Theme.fg1)
+                .padding(.top, 20)
+
+            Text("\(restaurant.cuisineType) · \(restaurant.address)")
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.fg2)
+                .padding(.top, 4)
+
+            statStrip
+                .padding(.top, 16)
+
+            if !photoURLs.isEmpty {
+                photosSection
+                    .padding(.top, 22)
+            }
+
+            if !restaurant.isCafe && !restaurant.isDessertShop && restaurant.isRestaurant {
+                halalVerification
+                    .padding(.top, 22)
+            }
+
+            if !restaurant.businessHours.isEmpty {
+                hoursSection
+                    .padding(.top, 22)
+            }
+
+            secondaryActions
+                .padding(.top, 22)
+
+            Spacer().frame(height: 120)
+        }
+        .padding(.horizontal, 18)
     }
 
-    private var ratingsRow: some View {
-        HStack(spacing: 16) {
+    // MARK: - Stat Strip
+
+    private var statStrip: some View {
+        HStack(spacing: 0) {
             if let rating = restaurant.rating, rating > 0 {
-                HStack(spacing: 4) {
-                    Image(systemName: "star.fill")
-                        .foregroundStyle(.yellow)
-                    Text(String(format: "%.1f", rating))
-                        .font(.subheadline.bold())
-                }
+                StatColumn(
+                    label: "Rating",
+                    value: String(format: "%.1f", rating),
+                    sub: "\(restaurant.reviewCount) reviews",
+                    icon: "star.fill"
+                )
+                Divider().frame(height: 40)
             }
-
-            if restaurant.reviewCount > 0 {
-                HStack(spacing: 4) {
-                    Image(systemName: "text.bubble")
-                        .foregroundStyle(.secondary)
-                    Text("\(restaurant.reviewCount) reviews")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+            if let travel {
+                StatColumn(
+                    label: "Walk",
+                    value: "\(travel.walkingTimeMinutes)m",
+                    sub: travel.formattedDistance,
+                    icon: "figure.walk"
+                )
+                Divider().frame(height: 40)
             }
-        }
-    }
-
-    private var halalBadge: some View {
-        Label(
-            restaurant.certificationLabel,
-            systemImage: restaurant.halalStatus == .partiallyHalal ? "exclamationmark.triangle.fill" : "checkmark.seal.fill"
-        )
-        .font(.caption.bold())
-        .foregroundStyle(restaurant.halalStatus == .partiallyHalal ? .orange : .green)
-    }
-
-    // MARK: - Travel Info
-
-    private func travelSection(_ travel: TravelInfo) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 20) {
-                HStack(spacing: 6) {
-                    Image(systemName: "figure.walk")
-                        .foregroundStyle(.blue)
-                    VStack(alignment: .leading) {
-                        Text("\(travel.walkingTimeMinutes) min")
-                            .font(.subheadline.bold())
-                        Text(travel.formattedDistance)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                HStack(spacing: 6) {
-                    Image(systemName: "car.fill")
-                        .foregroundStyle(.teal)
-                    VStack(alignment: .leading) {
-                        Text("\(travel.drivingTimeMinutes) min")
-                            .font(.subheadline.bold())
-                        Text(travel.formattedDistance)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
+            StatColumn(
+                label: "Status",
+                value: openStatusText,
+                sub: "Verify hours",
+                positive: true
+            )
         }
         .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .background(Theme.bgTint, in: RoundedRectangle(cornerRadius: 16))
     }
 
     // MARK: - Photos
 
     private var photosSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Photos")
-                .font(.headline)
+            Text("PHOTOS")
+                .eyebrowStyle()
 
-            if loadingPhotos && photoURLs.isEmpty {
-                HStack {
-                    ProgressView()
-                    Text("Loading photos…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 6)
-                }
-            } else if photoURLs.isEmpty {
-                Label("No photos available", systemImage: "photo.on.rectangle.angled")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(photoURLs, id: \.absoluteString) { url in
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 200, height: 150)
-                                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                                case .failure:
-                                    photoPlaceholder
-                                case .empty:
-                                    ProgressView()
-                                        .frame(width: 200, height: 150)
-                                @unknown default:
-                                    photoPlaceholder
-                                }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(photoURLs, id: \.absoluteString) { url in
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 200, height: 140)
+                                    .clipShape(RoundedRectangle(cornerRadius: Theme.rMd))
+                            case .failure:
+                                photoPlaceholder
+                            case .empty:
+                                ProgressView()
+                                    .frame(width: 200, height: 140)
+                            @unknown default:
+                                photoPlaceholder
                             }
                         }
                     }
@@ -1553,53 +1613,171 @@ struct ZabihahRestaurantSheet: View {
     }
 
     private var photoPlaceholder: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(Color(.secondarySystemBackground))
-            .frame(width: 200, height: 150)
+        RoundedRectangle(cornerRadius: Theme.rMd)
+            .fill(Theme.mapPaper)
+            .frame(width: 200, height: 140)
             .overlay {
                 Image(systemName: "photo")
                     .font(.title2)
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(Theme.fg4)
             }
     }
 
-    // MARK: - About
+    // MARK: - Halal Verification
 
-    private var aboutSection: some View {
+    private var halalVerification: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("About")
-                .font(.headline)
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(Theme.pinColor(for: restaurant.halalStatus))
+                    .frame(width: 28, height: 28)
+                    .overlay {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                VStack(alignment: .leading) {
+                    Text("Halal verification")
+                        .font(.system(size: 14.5, weight: .bold))
+                        .foregroundStyle(Theme.fg1)
+                    Text(restaurant.certificationLabel)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Theme.fg2)
+                }
+            }
 
-            Text(restaurantSummary)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var restaurantSummary: String {
-        var parts: [String] = []
-        parts.append(restaurant.cuisineType)
-        if !restaurant.isCafe && restaurant.isRestaurant {
-            parts.append(restaurant.certificationLabel)
-        }
-        if let rating = restaurant.rating, rating > 0 {
-            parts.append("\(String(format: "%.1f", rating))★")
-        }
-        if !restaurant.businessHours.isEmpty {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEEE"
-            let today = formatter.string(from: Date())
-            if let entry = restaurant.businessHours.first(where: { $0.day.caseInsensitiveCompare(today) == .orderedSame }) {
-                parts.append("Today: \(entry.hours)")
+            if let desc = restaurant.halalDescription {
+                Text(desc)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.fg2)
+                    .lineSpacing(3)
             }
         }
-        return parts.joined(separator: " · ")
+        .padding(16)
+        .background(Theme.bgTint, in: RoundedRectangle(cornerRadius: 18))
     }
 
-    // MARK: - Action Buttons
+    // MARK: - Hours
 
-    private var actionButtons: some View {
+    private var hoursSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("HOURS")
+                .eyebrowStyle()
+            ForEach(restaurant.businessHours, id: \.day) { hours in
+                HStack {
+                    Text(hours.day)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Theme.fg1)
+                        .frame(width: 90, alignment: .leading)
+                    Text(hours.hours)
+                        .font(.mono(13))
+                        .foregroundStyle(Theme.fg2)
+                }
+            }
+        }
+        .padding(16)
+        .background(Theme.bgTint, in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    // MARK: - Secondary Actions
+
+    private var secondaryActions: some View {
         VStack(spacing: 10) {
+            if let phone = phoneNumber {
+                Button {
+                    let digits = phone.filter { $0.isNumber || $0 == "+" }
+                    if let url = URL(string: "tel:\(digits)") {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "phone.fill")
+                            .font(.system(size: 13, weight: .bold))
+                        Text(phone)
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .foregroundStyle(Theme.fg1)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(.white)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Theme.fg1.opacity(0.12), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            } else if loadingPhone {
+                HStack {
+                    ProgressView()
+                    Text("Looking up phone…")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.fg3)
+                        .padding(.leading, 6)
+                }
+            }
+
+            Button {
+                showMenuSheet = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "menucard.fill")
+                        .font(.system(size: 13, weight: .bold))
+                    Text("View Menu")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundStyle(Theme.fg1)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(.white)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(Theme.fg1.opacity(0.12), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+
+            if !itineraries.isEmpty {
+                HStack(spacing: 10) {
+                    Button {
+                        showAddSheet = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("Add to trip")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundStyle(Theme.fg1)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(Theme.bgTint)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(Theme.fg1.opacity(0.08), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        showSwapSheet = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.triangle.swap")
+                                .font(.system(size: 12, weight: .bold))
+                            Text("Swap")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundStyle(Theme.fg1)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(Theme.bgTint)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(Theme.fg1.opacity(0.08), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    // MARK: - Bottom Bar
+
+    private var bottomBar: some View {
+        HStack(spacing: 10) {
             Button {
                 let placemark = MKPlacemark(coordinate: restaurant.coordinate)
                 let mapItem = MKMapItem(placemark: placemark)
@@ -1608,67 +1786,18 @@ struct ZabihahRestaurantSheet: View {
                     MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
                 ])
             } label: {
-                Label("Directions", systemImage: "map.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.teal)
-
-            if let phone = phoneNumber {
-                Button {
-                    let digits = phone.filter { $0.isNumber || $0 == "+" }
-                    if let url = URL(string: "tel:\(digits)") {
-                        UIApplication.shared.open(url)
-                    }
-                } label: {
-                    Label("Call \(phone)", systemImage: "phone.fill")
-                        .frame(maxWidth: .infinity)
+                HStack(spacing: 6) {
+                    Image(systemName: "map")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("Directions")
+                        .font(.system(size: 14, weight: .semibold))
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-            } else if loadingPhone {
-                HStack {
-                    ProgressView()
-                    Text("Looking up phone number…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 6)
-                }
-            }
-
-            Button {
-                showMenuSheet = true
-            } label: {
-                Label("View Menu", systemImage: "menucard.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.orange)
-
-            if !itineraries.isEmpty {
-                Button {
-                    showAddSheet = true
-                } label: {
-                    Label("Add to Itinerary", systemImage: "plus.circle.fill")
-                        .font(.subheadline.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.teal.opacity(0.2))
-                        .foregroundStyle(.teal)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-
-                Button {
-                    showSwapSheet = true
-                } label: {
-                    Label("Swap in Itinerary", systemImage: "arrow.triangle.swap")
-                        .font(.subheadline.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.orange.opacity(0.2))
-                        .foregroundStyle(.orange)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(.white)
+                .foregroundStyle(Theme.fg1)
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(Theme.fg1.opacity(0.12), lineWidth: 1))
             }
 
             Button {
@@ -1685,15 +1814,25 @@ struct ZabihahRestaurantSheet: View {
                     }
                 }
             } label: {
-                Label(
-                    favouriteRestaurantIDs.contains(stableRestaurantID) ? "Favourited" : "Add to Favourites",
-                    systemImage: favouriteRestaurantIDs.contains(stableRestaurantID) ? "heart.fill" : "heart"
-                )
+                HStack(spacing: 6) {
+                    Image(systemName: isFavourited ? "heart.fill" : "heart")
+                        .font(.system(size: 13, weight: .bold))
+                    Text(isFavourited ? "Saved" : "Save")
+                        .font(.system(size: 14, weight: .bold))
+                }
                 .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Theme.fg1)
+                .foregroundStyle(.white)
+                .clipShape(Capsule())
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.pink)
         }
+        .buttonStyle(.plain)
+        .padding(.horizontal, Theme.s4)
+        .padding(.top, 12)
+        .padding(.bottom, 22)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) { Divider().opacity(0.3) }
     }
 
     private var stableRestaurantID: UUID {
@@ -2367,6 +2506,84 @@ struct ExplorePlaceSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+        }
+    }
+}
+
+// MARK: - Favourite Detail Sheet
+
+struct FavouriteDetailSheet: View {
+    let restaurant: Restaurant
+    @Binding var itineraries: [Itinerary]
+    @Binding var favouriteRestaurantIDs: Set<UUID>
+    @Binding var exploreFavouriteRestaurants: [Restaurant]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(restaurant.name)
+                            .font(.title2.bold())
+                        Text(restaurant.cuisineType)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "heart.fill")
+                        .font(.title3)
+                        .padding(10)
+                        .background(Color.pink.opacity(0.2))
+                        .foregroundStyle(.pink)
+                        .clipShape(Circle())
+                }
+
+                Label(restaurant.address, systemImage: "mappin.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                if restaurant.rating > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.yellow)
+                        Text(String(format: "%.1f", restaurant.rating))
+                            .font(.subheadline.bold())
+                    }
+                }
+
+                Divider()
+
+                VStack(spacing: 10) {
+                    Button {
+                        let placemark = MKPlacemark(coordinate: restaurant.coordinate)
+                        let mapItem = MKMapItem(placemark: placemark)
+                        mapItem.name = restaurant.name
+                        mapItem.openInMaps(launchOptions: [
+                            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                        ])
+                    } label: {
+                        Label("Directions", systemImage: "map.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.pink)
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            favouriteRestaurantIDs.remove(restaurant.id)
+                            exploreFavouriteRestaurants.removeAll { $0.id == restaurant.id }
+                        }
+                        dismiss()
+                    } label: {
+                        Label("Remove from Favourites", systemImage: "heart.slash.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.gray)
+                }
+            }
+            .padding(24)
         }
     }
 }
