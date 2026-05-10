@@ -70,6 +70,7 @@ enum Theme {
         switch status {
         case .zabiha, .fullyHalal: return pinCertified
         case .partiallyHalal: return pinFriendly
+        case .unverified: return pinWarning
         }
     }
 

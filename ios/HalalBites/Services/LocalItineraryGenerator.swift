@@ -393,7 +393,7 @@ enum LocalItineraryGenerator {
 
             guard let response = try? await MKLocalSearch(request: request).start() else { continue }
 
-            let excludedChains = ["starbucks", "dunkin", "mcdonald", "subway"]
+            let excludedChains = ["starbucks", "dunkin", "mcdonald", "subway", "culver"]
             for item in response.mapItems {
                 guard let name = item.name, !seenNames.contains(name.lowercased()) else { continue }
                 let nameLower = name.lowercased()
@@ -420,8 +420,7 @@ enum LocalItineraryGenerator {
                     level = .vegetarian
                     halalDesc = nil
                 } else {
-                    level = .halal
-                    halalDesc = nil
+                    continue
                 }
 
                 let address = [

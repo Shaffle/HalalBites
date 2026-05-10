@@ -71,6 +71,7 @@ struct CertBadge: View {
         switch status {
         case .zabiha, .fullyHalal: return Theme.pinCertified
         case .partiallyHalal: return Theme.pinFriendly
+        case .unverified: return Theme.pinWarning
         }
     }
 
@@ -79,12 +80,13 @@ struct CertBadge: View {
         case .zabiha: return "Halal"
         case .fullyHalal: return "Halal"
         case .partiallyHalal: return "Partially-Halal"
+        case .unverified: return "Verify Halal"
         }
     }
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "checkmark.seal.fill")
+            Image(systemName: status == .unverified ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
                 .font(.system(size: compact ? 11 : 13))
             Text(label)
                 .font(.system(size: compact ? 10.5 : 11.5, weight: .semibold))

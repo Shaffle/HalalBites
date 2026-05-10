@@ -2024,11 +2024,15 @@ struct ZabihahBadge: View {
         case .zabiha: return "Halal \u{2713}"
         case .fullyHalal: return "Halal \u{2713}"
         case .partiallyHalal: return "Partially Halal \u{26A0}"
+        case .unverified: return "Verify Halal"
         }
     }
 
     private var badgeColor: Color {
-        status == .partiallyHalal ? .orange : .teal
+        switch status {
+        case .zabiha, .fullyHalal: return .teal
+        case .partiallyHalal, .unverified: return .orange
+        }
     }
 
     var body: some View {

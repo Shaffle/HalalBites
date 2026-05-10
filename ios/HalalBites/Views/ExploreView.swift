@@ -21,7 +21,7 @@ struct ExploreView: View {
     @State private var locationLabel = "Your location"
 
     private var certifiedRestaurants: [ZabihahRestaurant] {
-        restaurants.filter { !$0.isExcludedChain && $0.isRestaurant && $0.halalStatus != .partiallyHalal }
+        restaurants.filter { !$0.isExcludedChain && $0.isRestaurant && ($0.halalStatus == .fullyHalal || $0.halalStatus == .zabiha) }
     }
 
     private var openRestaurants: [ZabihahRestaurant] {
@@ -802,7 +802,7 @@ struct RestaurantRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: 16))
 
                     PinDot(
-                        restaurant.halalStatus == .partiallyHalal ? .friendly : .certified,
+                        restaurant.halalStatus == .fullyHalal || restaurant.halalStatus == .zabiha ? .certified : .friendly,
                         size: 20
                     )
                     .padding(6)

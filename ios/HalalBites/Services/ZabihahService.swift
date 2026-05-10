@@ -11,6 +11,7 @@ enum ZabihahHalalStatus: String, Hashable {
     case fullyHalal
     case partiallyHalal
     case zabiha
+    case unverified
 }
 
 struct ZabihahRestaurant: Identifiable, Hashable {
@@ -38,6 +39,7 @@ struct ZabihahRestaurant: Identifiable, Hashable {
         case .zabiha: return "Halal"
         case .partiallyHalal: return "Partially-Halal"
         case .fullyHalal: return "Halal"
+        case .unverified: return "Verify Halal"
         }
     }
 
@@ -45,7 +47,7 @@ struct ZabihahRestaurant: Identifiable, Hashable {
         switch halalStatus {
         case .zabiha: return .halal
         case .fullyHalal: return .halal
-        case .partiallyHalal: return .partiallyHalal
+        case .partiallyHalal, .unverified: return .partiallyHalal
         }
     }
 
@@ -70,7 +72,7 @@ struct ZabihahRestaurant: Identifiable, Hashable {
             || Self.cafeCuisineKeywords.contains { lowerCuisine.contains($0) }
     }
 
-    private static let excludedChains = ["starbucks", "dunkin", "mcdonalds", "subway", "burger king", "carls jr.", "wendy's", "pizza hut", "chipotle", "taco bell", "red lobster", "jack in the box", "kfc", "costco"]
+    private static let excludedChains = ["starbucks", "dunkin", "mcdonalds", "subway", "burger king", "carls jr.", "wendy's", "pizza hut", "chipotle", "taco bell", "red lobster", "jack in the box", "kfc", "costco", "culver"]
 
     var isExcludedChain: Bool {
         let lower = name.lowercased()
@@ -235,27 +237,31 @@ class ZabihahService {
             "shawarma", "kebab", "falafel", "biryani"
         ]
         let queries = baseQueries + extraQueries
-        let allResults = await withTaskGroup(of: [MKMapItem].self) { group in
+        let allResults = await withTaskGroup(of: [(MKMapItem, Bool)].self) { group in
             for query in queries {
                 group.addTask {
                     let request = MKLocalSearch.Request()
                     request.naturalLanguageQuery = query
                     request.region = region
-                    return (try? await MKLocalSearch(request: request).start())?.mapItems ?? []
+                    let hasHalalSearchSignal = Self.hasHalalSignal(in: query)
+                    let items = (try? await MKLocalSearch(request: request).start())?.mapItems ?? []
+                    return items.map { ($0, hasHalalSearchSignal) }
                 }
             }
-            var items: [MKMapItem] = []
+            var items: [(MKMapItem, Bool)] = []
             for await batch in group { items.append(contentsOf: batch) }
             return items
         }
 
         var seenNames: Set<String> = []
-        var unique: [MKMapItem] = []
-        for item in allResults {
+        var unique: [(MKMapItem, Bool)] = []
+        for (item, hasHalalSearchSignal) in allResults {
             let key = (item.name ?? "").lowercased()
-            if !seenNames.contains(key) {
+            if let index = unique.firstIndex(where: { ($0.0.name ?? "").lowercased() == key }) {
+                unique[index].1 = unique[index].1 || hasHalalSearchSignal
+            } else if !seenNames.contains(key) {
                 seenNames.insert(key)
-                unique.append(item)
+                unique.append((item, hasHalalSearchSignal))
             }
         }
 
@@ -267,6 +273,7 @@ class ZabihahService {
         "gas station", "fuel", "7-eleven", "circle k", "maverick", "quiktrip", "wawa",
         "mcdonald", "burger king", "wendy's", "taco bell", "jack in the box",
         "popeyes", "kfc", "chick-fil-a", "panda express", "chipotle", "subway",
+        "culver",
         "applebee's", "chili's", "olive garden", "red lobster", "outback",
         "denny's", "ihop", "cheesecake factory", "panera", "buffalo wild wings",
         "walmart", "target", "costco", "dollar", "home depot", "lowes",
@@ -279,8 +286,8 @@ class ZabihahService {
         .carRental, .evCharger, .laundry, .store, .fitnessCenter, .movieTheater
     ]
 
-    private static func mapItemsToRestaurants(_ items: [MKMapItem]) -> [ZabihahRestaurant] {
-        items.compactMap { item -> ZabihahRestaurant? in
+    private static func mapItemsToRestaurants(_ items: [(item: MKMapItem, hasHalalSearchSignal: Bool)]) -> [ZabihahRestaurant] {
+        items.compactMap { item, hasHalalSearchSignal -> ZabihahRestaurant? in
             guard let name = item.name else { return nil }
             let coord = item.placemark.coordinate
             let nameLower = name.lowercased()
@@ -321,7 +328,9 @@ class ZabihahService {
                 cuisineType = "Restaurant"
             }
 
-            let halalStatus: ZabihahHalalStatus = .fullyHalal
+            let halalStatus: ZabihahHalalStatus = hasHalalSearchSignal || Self.hasHalalSignal(in: name)
+                ? .fullyHalal
+                : .unverified
 
             return ZabihahRestaurant(
                 id: "apple-\(name.hashValue)-\(coord.latitude)",
@@ -333,13 +342,18 @@ class ZabihahService {
                 zabiha: false,
                 rating: nil,
                 reviewCount: 0,
-                halalDescription: "Verify halal status",
+                halalDescription: halalStatus == .unverified ? "Apple Maps result. Verify halal status before visiting." : "Verify halal status",
                 isRestaurant: !(isGrocery || isGroceryByName),
                 halalStatus: halalStatus,
                 photoURLs: [],
                 businessHours: []
             )
         }
+    }
+
+    private static func hasHalalSignal(in text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("halal") || lower.contains("zabiha") || lower.contains("zabihah")
     }
 
     static func parseRestaurants(from html: String) -> [ZabihahRestaurant] {
