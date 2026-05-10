@@ -118,7 +118,7 @@ class ScrapingService {
         guard let request = makeJSONPostRequest(
             path: "/api/restaurants",
             body: ["latitude": latitude, "longitude": longitude],
-            timeout: 15
+            timeout: 5
         ) else { return nil }
 
         guard let (data, response) = try? await URLSession.shared.data(for: request),

@@ -49,14 +49,25 @@ struct ZabihahRestaurant: Identifiable, Hashable {
         }
     }
 
-    private static let cafeNameKeywords = ["cafe", "café", "coffee", "espresso", "roastery", "bakery", "bakeshop", "patisserie", "tea", "boba", "pastry", "dessert", "sweets", "donut", "doughnut", "juice", "smoothie", "ice cream", "gelato"]
-    private static let cafeCuisineKeywords = ["cafe", "café", "coffee", "bakery", "tea", "dessert", "juice", "smoothie"]
+    private static let dessertNameKeywords = ["ice cream", "icecream", "gelato", "frozen yogurt", "froyo", "frozen custard", "custard", "creamery", "dessert", "sweets", "donut", "doughnut", "pastry", "patisserie", "bakeshop", "cupcake", "cookie", "candy", "chocolate", "churro"]
+    private static let dessertCuisineKeywords = ["dessert", "desserts", "ice cream", "ice cream & frozen yogurt", "gelato", "frozen yogurt", "frozen desserts", "frozen custard", "custard", "donut", "donuts", "bakery", "pastry", "sweets"]
+
+    var isDessertShop: Bool {
+        let lowerName = name.lowercased()
+        let lowerCuisine = cuisineType.lowercased()
+        return Self.dessertNameKeywords.contains { lowerName.contains($0) }
+            || Self.dessertCuisineKeywords.contains { lowerCuisine.contains($0) }
+    }
+
+    private static let cafeNameKeywords = ["cafe", "café", "coffee", "espresso", "roastery", "tea", "boba", "juice", "smoothie"]
+    private static let cafeCuisineKeywords = ["cafe", "café", "coffee", "tea", "juice", "smoothie"]
 
     var isCafe: Bool {
+        if isDessertShop { return false }
         let lowerName = name.lowercased()
         let lowerCuisine = cuisineType.lowercased()
         return Self.cafeNameKeywords.contains { lowerName.contains($0) }
-            || Self.cafeCuisineKeywords.contains { lowerCuisine == $0 || lowerCuisine.contains("\($0),") || lowerCuisine.contains(", \($0)") }
+            || Self.cafeCuisineKeywords.contains { lowerCuisine.contains($0) }
     }
 
     private static let excludedChains = ["starbucks", "dunkin", "mcdonalds", "subway", "burger king", "carls jr.", "wendy's", "pizza hut", "chipotle", "taco bell", "red lobster", "jack in the box", "kfc", "costco"]
@@ -122,9 +133,13 @@ class ZabihahService {
     }
 
     func fetchCombined(latitude: Double, longitude: Double) async -> [ZabihahRestaurant] {
-        async let zabihahResults = (try? fetchNearby(latitude: latitude, longitude: longitude)) ?? []
+        async let zabihahResults = Self.withTimeout(seconds: 5) {
+            (try? await self.fetchNearby(latitude: latitude, longitude: longitude)) ?? []
+        } ?? []
         async let appleResults = Self.searchAppleMaps(latitude: latitude, longitude: longitude)
-        async let backendResults = Self.fetchScraplingRestaurants(latitude: latitude, longitude: longitude)
+        async let backendResults = Self.withTimeout(seconds: 5) {
+            await Self.fetchScraplingRestaurants(latitude: latitude, longitude: longitude)
+        } ?? []
 
         let zabihah = await zabihahResults
         let apple = await appleResults
@@ -144,8 +159,24 @@ class ZabihahService {
                 merged.append(restaurant)
             }
         }
-        let results = merged.isEmpty ? Self.mockRestaurants(near: latitude, longitude: longitude) : merged
-        return await Self.fillMissingYelpPhotos(in: results)
+        return merged.isEmpty ? Self.mockRestaurants(near: latitude, longitude: longitude) : merged
+    }
+
+    private static func withTimeout<T>(seconds: Double, operation: @escaping () async -> T) async -> T? {
+        await withTaskGroup(of: T?.self) { group in
+            group.addTask {
+                await operation()
+            }
+            group.addTask {
+                let nanoseconds = UInt64(seconds * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanoseconds)
+                return nil
+            }
+
+            let result = await group.next() ?? nil
+            group.cancelAll()
+            return result
+        }
     }
 
     private static func fillMissingYelpPhotos(in restaurants: [ZabihahRestaurant]) async -> [ZabihahRestaurant] {
@@ -191,20 +222,19 @@ class ZabihahService {
         return decoded.map { $0.toZabihahRestaurant() }
     }
 
-    static func searchAppleMaps(latitude: Double, longitude: Double, extraQueries: [String] = []) async -> [ZabihahRestaurant] {
+    static func searchAppleMaps(latitude: Double, longitude: Double, extraQueries: [String] = [], queries: [String]? = nil) async -> [ZabihahRestaurant] {
         let center = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
         let region = MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 0.25, longitudeDelta: 0.25))
 
-        let queries = [
+        let baseQueries = queries ?? [
             "halal restaurant", "halal food", "halal grocery", "halal meat",
-            "cafe", "bakery", "coffee",
+            "cafe", "bakery", "coffee shop", "ice cream", "dessert",
             "mediterranean restaurant", "middle eastern restaurant",
             "pakistani restaurant", "afghan restaurant", "turkish restaurant",
-            "lebanese restaurant", "moroccan restaurant", "persian restaurant", "mexican restaurant", "thai restaurant", "chinese restaurant",
-            "shawarma", "kebab", "falafel", "biryani",
-            "indian restaurant", "somali restaurant", "yemeni restaurant",
-            "cafe", "coffee shop", "bakery", "donut shop", "dessert"
-        ] + extraQueries
+            "lebanese restaurant", "indian restaurant", "somali restaurant",
+            "shawarma", "kebab", "falafel", "biryani"
+        ]
+        let queries = baseQueries + extraQueries
         let allResults = await withTaskGroup(of: [MKMapItem].self) { group in
             for query in queries {
                 group.addTask {
@@ -264,10 +294,14 @@ class ZabihahService {
             let isGrocery = poi == .foodMarket
 
             let groceryKeywords = ["grocery", "market", "meat", "butcher", "supermarket"]
-            let cafeKeywords = ["cafe", "café", "coffee", "tea", "bakery", "dessert", "juice", "smoothie"]
+            let dessertKeywords = ["ice cream", "icecream", "gelato", "frozen yogurt", "froyo", "frozen custard", "custard", "creamery", "dessert", "sweets", "donut", "doughnut", "cupcake", "candy", "chocolate", "churro"]
+            let cafeKeywords = ["cafe", "café", "coffee", "tea", "juice", "smoothie"]
+            let bakeryKeywords = ["bakery", "bakeshop", "pastry", "patisserie"]
             let isGroceryByName = groceryKeywords.contains { nameLower.contains($0) }
+            let isDessertByName = dessertKeywords.contains { nameLower.contains($0) }
             let isCafeByName = cafeKeywords.contains { nameLower.contains($0) }
-            let isCafe = isCafeOrBakery || isCafeByName
+            let isBakeryByName = bakeryKeywords.contains { nameLower.contains($0) }
+            let isCafe = !isDessertByName && (isCafeOrBakery || isCafeByName || isBakeryByName)
 
             let address = [
                 item.placemark.subThoroughfare,
@@ -277,7 +311,9 @@ class ZabihahService {
             ].compactMap { $0 }.joined(separator: " ")
 
             let cuisineType: String
-            if isCafe {
+            if isDessertByName {
+                cuisineType = "Dessert"
+            } else if isCafe {
                 cuisineType = "Cafe"
             } else if isGrocery || isGroceryByName {
                 cuisineType = "Grocery"

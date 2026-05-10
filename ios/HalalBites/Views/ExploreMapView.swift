@@ -92,16 +92,18 @@ enum ActivityType: String, CaseIterable, Identifiable {
         }
     }
 
-    var searchQuery: String {
+    var searchQueries: [String] {
         switch self {
-        case .parks: return "park"
-        case .museums: return "museum"
-        case .shopping: return "shopping"
-        case .entertainment: return "entertainment"
-        case .sports: return "sports recreation"
-        case .nightlife: return "nightlife"
+        case .parks: return ["park", "garden", "trail", "nature"]
+        case .museums: return ["museum"]
+        case .shopping: return ["shopping", "mall", "outlet"]
+        case .entertainment: return ["movie theater", "bowling", "arcade", "amusement", "fun center", "attraction"]
+        case .sports: return ["sports recreation", "gym", "fitness", "stadium"]
+        case .nightlife: return ["nightlife"]
         }
     }
+
+    var searchQuery: String { searchQueries[0] }
 
     var poiCategories: [MKPointOfInterestCategory] {
         switch self {
@@ -187,6 +189,7 @@ struct ExplorePlace: Identifiable, Hashable {
     let address: String
     let coordinate: CLLocationCoordinate2D
     let category: String
+    let icon: String
     let placeType: PlaceType
 
     enum PlaceType: String, Hashable {
@@ -231,36 +234,37 @@ struct ExploreMapView: View {
     @State private var expandedCategory: ExploreFilterCategory?
     @State private var selectedMosque: MosqueLocation?
     @State private var allExplorePlaces: [ExplorePlace] = []
+    @State private var selectedExplorePlaces: [ExplorePlace] = []
     @State private var selectedPlace: ExplorePlace?
     @State private var selectedActivityTypes: Set<ActivityType> = []
     @State private var selectedLandmarkTypes: Set<LandmarkType> = []
+    @State private var loadingExploreCategoryKeys: Set<String> = []
     @State private var showMosques = true
     @State private var hasInitiallyLoaded = false
     @State private var mapCenter = CLLocationCoordinate2D(latitude: 33.3062, longitude: -111.8413)
+    @State private var exploreLoadGeneration = UUID()
 
     private var selectedRestaurant: ZabihahRestaurant? {
         restaurants.first { $0.id == selectedID }
     }
 
     private var explorePlaces: [ExplorePlace] {
-        if selectedActivityTypes.isEmpty && selectedLandmarkTypes.isEmpty {
-            return []
-        }
-        let activeActivityQueries = Set(selectedActivityTypes.map { $0.searchQuery.capitalized })
-        let activeLandmarkQueries = Set(selectedLandmarkTypes.map { $0.searchQuery.capitalized })
-        return allExplorePlaces.filter { place in
-            switch place.placeType {
-            case .activity: return activeActivityQueries.contains(place.category)
-            case .landmark: return activeLandmarkQueries.contains(place.category)
-            }
-        }
+        selectedExplorePlaces
     }
 
     private var locationDenied: Bool {
         location.authorizationStatus == .denied || location.authorizationStatus == .restricted
     }
 
+    private var hasPlaceFilters: Bool {
+        !selectedActivityTypes.isEmpty || !selectedLandmarkTypes.isEmpty
+    }
+
     private var filteredRestaurants: [ZabihahRestaurant] {
+        if hasPlaceFilters && selectedFoodTypes.isEmpty {
+            return []
+        }
+
         var results = restaurants.filter { !$0.isExcludedChain }
         if !searchText.isEmpty {
             results = results.filter {
@@ -282,7 +286,9 @@ struct ExploreMapView: View {
                 UserAnnotation()
                 ForEach(filteredRestaurants) { restaurant in
                     Annotation(restaurant.name, coordinate: restaurant.coordinate, anchor: .bottom) {
-                        if restaurant.isCafe {
+                        if restaurant.isDessertShop {
+                            DessertMapPin()
+                        } else if restaurant.isCafe {
                             CafeMapPin()
                         } else if restaurant.isRestaurant {
                             HalalMapPin()
@@ -302,13 +308,8 @@ struct ExploreMapView: View {
                 }
                 ForEach(explorePlaces) { place in
                     Annotation(place.name, coordinate: place.coordinate, anchor: .bottom) {
-                        if place.placeType == .activity {
-                            ActivityMapPin()
-                                .onTapGesture { selectedPlace = place }
-                        } else {
-                            LandmarkMapPin()
-                                .onTapGesture { selectedPlace = place }
-                        }
+                        ExplorePlaceMapPin(icon: place.icon, placeType: place.placeType)
+                            .onTapGesture { selectedPlace = place }
                     }
                 }
             }
@@ -316,45 +317,10 @@ struct ExploreMapView: View {
                 MapCompass()
                 MapScaleView()
             }
+            .mapStyle(.standard(pointsOfInterest: .excludingAll))
 
             VStack(spacing: 0) {
-                HStack(alignment: .top, spacing: 8) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            showSideMenu = true
-                        }
-                    } label: {
-                        Image(systemName: "line.3.horizontal")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .frame(width: 40, height: 40)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                    }
-                    .padding(.leading, 12)
-                    .padding(.top, 8)
-                    searchBar
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            position = .userLocation(fallback: .region(
-                                MKCoordinateRegion(
-                                    center: CLLocationCoordinate2D(latitude: 33.3062, longitude: -111.8413),
-                                    span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-                                )
-                            ))
-                        }
-                    } label: {
-                        Image(systemName: "location.fill")
-                            .font(.system(size: 16))
-                            .foregroundStyle(.blue)
-                            .frame(width: 40, height: 40)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                    }
-                    .padding(.trailing, 12)
-                    .padding(.top, 8)
-                }
-                exploreFilters
+                mapHeader
 
                 if locationDenied {
                     locationDeniedBanner
@@ -430,13 +396,76 @@ struct ExploreMapView: View {
 
     // MARK: - Search Bar
 
+    private var mapHeader: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        showSideMenu = true
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Theme.fg1)
+                        .frame(width: 40, height: 40)
+                        .background(Theme.mapPaper, in: RoundedRectangle(cornerRadius: Theme.rSm))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.rSm)
+                                .stroke(Theme.stroke1, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+
+                searchBar
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        position = .userLocation(fallback: .region(
+                            MKCoordinateRegion(
+                                center: CLLocationCoordinate2D(latitude: 33.3062, longitude: -111.8413),
+                                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                            )
+                        ))
+                    }
+                } label: {
+                    Image(systemName: "location.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Theme.pinCertified)
+                        .frame(width: 40, height: 40)
+                        .background(Theme.mapPaper, in: RoundedRectangle(cornerRadius: Theme.rSm))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.rSm)
+                                .stroke(Theme.stroke1, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, Theme.s4)
+            .padding(.top, Theme.s3)
+            .padding(.bottom, Theme.s2)
+
+            exploreFilters
+        }
+        .background {
+            Theme.bg
+                .opacity(0.96)
+                .ignoresSafeArea(edges: .top)
+        }
+        .overlay(alignment: .bottom) {
+            Divider().opacity(0.28)
+        }
+    }
+
     private var searchBar: some View {
-        HStack {
+        HStack(spacing: 10) {
             if searchExpanded {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Theme.fg2)
                 TextField("Search cities, places, restaurants…", text: $searchText)
                     .textFieldStyle(.plain)
+                    .font(.system(size: 14.5, weight: .medium))
+                    .foregroundStyle(Theme.fg1)
                     .submitLabel(.search)
                     .onSubmit {
                         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -450,29 +479,39 @@ struct ExploreMapView: View {
                     }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.fg3)
                 }
+                .buttonStyle(.plain)
             } else {
                 Button {
                     withAnimation(.easeInOut(duration: 0.25)) {
                         searchExpanded = true
                     }
                 } label: {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Theme.fg2)
+                        Text("Search map")
+                            .font(.system(size: 14.5, weight: .medium))
+                            .foregroundStyle(Theme.fg2)
+                        Spacer()
+                    }
                 }
+                .buttonStyle(.plain)
             }
         }
-        .padding(10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-        .padding(.top, 8)
+        .frame(height: 40)
+        .padding(.horizontal, 14)
+        .background(Theme.mapPaper, in: Capsule())
+        .overlay(Capsule().stroke(Theme.stroke1, lineWidth: 1))
     }
 
     // MARK: - Explore Filters
 
     private var activeFilterLabel: String {
-        let count = selectedFoodTypes.count + selectedActivityTypes.count + selectedLandmarkTypes.count
+        let count = selectedFoodTypes.count + selectedActivityTypes.count + selectedLandmarkTypes.count + (showMosques ? 0 : 1)
         if count > 1 { return "\(count) Filters" }
         if let food = selectedFoodTypes.first { return food.rawValue }
         if let activity = selectedActivityTypes.first { return activity.rawValue }
@@ -482,19 +521,20 @@ struct ExploreMapView: View {
     }
 
     private var hasActiveFilter: Bool {
-        !selectedFoodTypes.isEmpty || !selectedActivityTypes.isEmpty || !selectedLandmarkTypes.isEmpty
+        !selectedFoodTypes.isEmpty || !selectedActivityTypes.isEmpty || !selectedLandmarkTypes.isEmpty || !showMosques
     }
 
     private func clearAllFilters() {
         selectedFoodTypes.removeAll()
         selectedActivityTypes.removeAll()
         selectedLandmarkTypes.removeAll()
+        selectedExplorePlaces.removeAll()
         showMosques = true
     }
 
     private var exploreFilters: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 8) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         showFilters.toggle()
@@ -502,18 +542,22 @@ struct ExploreMapView: View {
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .font(.system(size: 13, weight: .semibold))
                         Text(activeFilterLabel)
-                            .font(.caption.bold())
+                            .font(.system(size: 12.5, weight: .semibold))
                         Image(systemName: showFilters ? "chevron.up" : "chevron.down")
-                            .font(.caption2)
+                            .font(.system(size: 10, weight: .semibold))
                     }
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.regularMaterial, in: Capsule())
-                    .shadow(color: .black.opacity(0.1), radius: 3, y: 1)
-                    .foregroundStyle(hasActiveFilter ? .teal : .primary)
+                    .padding(.vertical, 7)
+                    .foregroundStyle(hasActiveFilter ? .white : Theme.fg1)
+                    .background(hasActiveFilter ? Theme.fg1 : .white, in: Capsule())
+                    .overlay(
+                        Capsule().stroke(hasActiveFilter ? .clear : Theme.stroke1, lineWidth: 1)
+                    )
                 }
+                .buttonStyle(.plain)
 
                 if hasActiveFilter {
                     Button {
@@ -522,18 +566,20 @@ struct ExploreMapView: View {
                         }
                     } label: {
                         Text("Clear")
-                            .font(.caption.bold())
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color(.systemGray5), in: Capsule())
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(.white, in: Capsule())
+                            .foregroundStyle(Theme.fg2)
+                            .overlay(Capsule().stroke(Theme.stroke1, lineWidth: 1))
                     }
+                    .buttonStyle(.plain)
                 }
 
                 Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 6)
+            .padding(.horizontal, Theme.s4)
+            .padding(.bottom, Theme.s2)
 
             if showFilters {
                 VStack(spacing: 0) {
@@ -564,11 +610,15 @@ struct ExploreMapView: View {
                                     .background(categoryChipBackground(category))
                                     .foregroundStyle(categoryChipForeground(category))
                                     .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule().stroke(categoryChipStroke(category), lineWidth: 1)
+                                    )
                                 }
+                                .buttonStyle(.plain)
                             }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, Theme.s4)
+                        .padding(.bottom, Theme.s2)
                     }
 
                     if let expanded = expandedCategory {
@@ -582,18 +632,22 @@ struct ExploreMapView: View {
     }
 
     private func categoryChipBackground(_ category: ExploreFilterCategory) -> Color {
-        switch category {
-        case .food: return !selectedFoodTypes.isEmpty ? category.color : Color(.systemGray5)
-        case .thingsToDo: return (!selectedActivityTypes.isEmpty || !selectedLandmarkTypes.isEmpty) ? category.color : Color(.systemGray5)
-        case .mosques: return showMosques ? category.color : Color(.systemGray5)
-        }
+        isCategoryActive(category) ? Theme.fg1 : .white
     }
 
     private func categoryChipForeground(_ category: ExploreFilterCategory) -> Color {
+        isCategoryActive(category) ? .white : Theme.fg1
+    }
+
+    private func categoryChipStroke(_ category: ExploreFilterCategory) -> Color {
+        isCategoryActive(category) ? .clear : Theme.stroke1
+    }
+
+    private func isCategoryActive(_ category: ExploreFilterCategory) -> Bool {
         switch category {
-        case .food: return !selectedFoodTypes.isEmpty ? .white : .primary
-        case .thingsToDo: return (!selectedActivityTypes.isEmpty || !selectedLandmarkTypes.isEmpty) ? .white : .primary
-        case .mosques: return showMosques ? .white : .primary
+        case .food: return !selectedFoodTypes.isEmpty
+        case .thingsToDo: return !selectedActivityTypes.isEmpty || !selectedLandmarkTypes.isEmpty
+        case .mosques: return showMosques
         }
     }
 
@@ -621,10 +675,14 @@ struct ExploreMapView: View {
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(selectedFoodTypes.contains(type) ? Color.teal : Color(.systemGray6))
-                            .foregroundStyle(selectedFoodTypes.contains(type) ? .white : .primary)
+                            .background(selectedFoodTypes.contains(type) ? Theme.fg1 : .white)
+                            .foregroundStyle(selectedFoodTypes.contains(type) ? .white : Theme.fg1)
                             .clipShape(Capsule())
+                            .overlay(
+                                Capsule().stroke(selectedFoodTypes.contains(type) ? .clear : Theme.stroke1, lineWidth: 1)
+                            )
                         }
+                        .buttonStyle(.plain)
                     }
                 case .thingsToDo:
                     ForEach(ActivityType.allCases) { type in
@@ -632,8 +690,13 @@ struct ExploreMapView: View {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 if selectedActivityTypes.contains(type) {
                                     selectedActivityTypes.remove(type)
+                                    removeExplorePlaces(for: type)
                                 } else {
                                     selectedActivityTypes.insert(type)
+                                    let generation = exploreLoadGeneration
+                                    Task {
+                                        await loadExplorePlaces(for: type, generation: generation)
+                                    }
                                 }
                             }
                         } label: {
@@ -645,18 +708,27 @@ struct ExploreMapView: View {
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(selectedActivityTypes.contains(type) ? Color.purple : Color(.systemGray6))
-                            .foregroundStyle(selectedActivityTypes.contains(type) ? .white : .primary)
+                            .background(selectedActivityTypes.contains(type) ? Theme.fg1 : .white)
+                            .foregroundStyle(selectedActivityTypes.contains(type) ? .white : Theme.fg1)
                             .clipShape(Capsule())
+                            .overlay(
+                                Capsule().stroke(selectedActivityTypes.contains(type) ? .clear : Theme.stroke1, lineWidth: 1)
+                            )
                         }
+                        .buttonStyle(.plain)
                     }
                     ForEach(LandmarkType.allCases) { type in
                         Button {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 if selectedLandmarkTypes.contains(type) {
                                     selectedLandmarkTypes.remove(type)
+                                    removeExplorePlaces(for: type)
                                 } else {
                                     selectedLandmarkTypes.insert(type)
+                                    let generation = exploreLoadGeneration
+                                    Task {
+                                        await loadExplorePlaces(for: type, generation: generation)
+                                    }
                                 }
                             }
                         } label: {
@@ -668,17 +740,21 @@ struct ExploreMapView: View {
                             }
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(selectedLandmarkTypes.contains(type) ? Color.indigo : Color(.systemGray6))
-                            .foregroundStyle(selectedLandmarkTypes.contains(type) ? .white : .primary)
+                            .background(selectedLandmarkTypes.contains(type) ? Theme.fg1 : .white)
+                            .foregroundStyle(selectedLandmarkTypes.contains(type) ? .white : Theme.fg1)
                             .clipShape(Capsule())
+                            .overlay(
+                                Capsule().stroke(selectedLandmarkTypes.contains(type) ? .clear : Theme.stroke1, lineWidth: 1)
+                            )
                         }
+                        .buttonStyle(.plain)
                     }
                 case .mosques:
                     EmptyView()
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 6)
+            .padding(.horizontal, Theme.s4)
+            .padding(.bottom, Theme.s3)
         }
     }
 
@@ -687,19 +763,25 @@ struct ExploreMapView: View {
     private var locationDeniedBanner: some View {
         HStack(spacing: 10) {
             Image(systemName: "location.slash.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(Theme.warning)
             Text("Location access denied.")
-                .font(.caption.bold())
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(Theme.fg1)
             Spacer()
             Button("Search by city") {
                 showManualSearch = true
             }
-            .font(.caption.bold())
-            .foregroundStyle(.teal)
+            .font(.system(size: 12.5, weight: .semibold))
+            .foregroundStyle(Theme.pinCertified)
         }
         .padding(12)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
-        .padding(.horizontal, 12)
+        .background(Theme.bg, in: RoundedRectangle(cornerRadius: Theme.rSm))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.rSm)
+                .stroke(Theme.stroke1, lineWidth: 1)
+        )
+        .padding(.horizontal, Theme.s4)
+        .padding(.top, Theme.s3)
     }
 
     // MARK: - Manual City Search Sheet
@@ -733,6 +815,11 @@ struct ExploreMapView: View {
 
     private func centreAndLoad(coordinate: CLLocationCoordinate2D) {
         mapCenter = coordinate
+        allExplorePlaces.removeAll()
+        selectedExplorePlaces.removeAll()
+        loadingExploreCategoryKeys.removeAll()
+        exploreLoadGeneration = UUID()
+        let generation = exploreLoadGeneration
         position = .region(MKCoordinateRegion(
             center: coordinate,
             span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
@@ -740,12 +827,171 @@ struct ExploreMapView: View {
         Task {
             async let nearby: () = loadNearby(coordinate: coordinate)
             async let mosques: () = searchMosques(near: coordinate)
-            async let places: () = loadAllExplorePlaces()
-            _ = await (nearby, mosques, places)
+            _ = await (nearby, mosques)
+            await loadSelectedExplorePlaces(generation: generation)
+        }
+    }
+
+    private func loadExplorePlaces(for activity: ActivityType, generation: UUID) async {
+        let category = activity.searchQuery.capitalized
+        let key = exploreCategoryKey(type: .activity, category: category)
+
+        let alreadyCached = await MainActor.run { () -> Bool in
+            guard exploreLoadGeneration == generation, selectedActivityTypes.contains(activity) else {
+                return true
+            }
+            let existing = allExplorePlaces.filter {
+                exploreCategoryKey(type: $0.placeType, category: $0.category) == key
+            }
+            if !existing.isEmpty {
+                mergeSelectedExplorePlaces(existing)
+                return true
+            }
+            if loadingExploreCategoryKeys.contains(key) { return true }
+            loadingExploreCategoryKeys.insert(key)
+            return false
+        }
+        guard !alreadyCached else { return }
+
+        var allResults: [ExplorePlace] = []
+        for query in activity.searchQueries {
+            let results = await fetchPlaces(
+                type: .activity,
+                query: query,
+                icon: activity.icon,
+                poiCategories: activity.poiCategories
+            )
+            allResults.append(contentsOf: results)
+        }
+        var seen: Set<String> = []
+        let deduped = allResults.filter { place in
+            let k = place.name.lowercased()
+            guard !seen.contains(k) else { return false }
+            seen.insert(k)
+            return true
+        }
+        let tagged = deduped.map { place in
+            ExplorePlace(
+                name: place.name,
+                address: place.address,
+                coordinate: place.coordinate,
+                category: category,
+                icon: place.icon,
+                placeType: place.placeType
+            )
+        }
+        await MainActor.run {
+            guard exploreLoadGeneration == generation, selectedActivityTypes.contains(activity) else {
+                loadingExploreCategoryKeys.remove(key)
+                return
+            }
+            mergeExplorePlaces(tagged)
+            mergeSelectedExplorePlaces(tagged)
+            loadingExploreCategoryKeys.remove(key)
+        }
+    }
+
+    private func loadExplorePlaces(for landmark: LandmarkType, generation: UUID) async {
+        await loadExplorePlaces(
+            type: .landmark,
+            query: landmark.searchQuery,
+            icon: landmark.icon,
+            poiCategories: landmark.poiCategories,
+            generation: generation,
+            isStillSelected: { selectedLandmarkTypes.contains(landmark) }
+        )
+    }
+
+    private func loadExplorePlaces(
+        type: ExplorePlace.PlaceType,
+        query: String,
+        icon: String,
+        poiCategories: [MKPointOfInterestCategory] = [],
+        generation: UUID,
+        isStillSelected: @escaping () -> Bool
+    ) async {
+        let category = query.capitalized
+        let key = exploreCategoryKey(type: type, category: category)
+        let alreadyLoaded = await MainActor.run { () -> Bool in
+            guard exploreLoadGeneration == generation, isStillSelected() else {
+                return true
+            }
+            let existingPlaces = allExplorePlaces.filter {
+                exploreCategoryKey(type: $0.placeType, category: $0.category) == key
+            }
+            if !existingPlaces.isEmpty {
+                mergeSelectedExplorePlaces(existingPlaces)
+                return true
+            }
+            if loadingExploreCategoryKeys.contains(key) {
+                return true
+            }
+            loadingExploreCategoryKeys.insert(key)
+            return false
+        }
+        guard !alreadyLoaded else { return }
+
+        let places = await fetchPlaces(
+            type: type,
+            query: query,
+            icon: icon,
+            poiCategories: poiCategories
+        )
+        await MainActor.run {
+            guard exploreLoadGeneration == generation, isStillSelected() else {
+                loadingExploreCategoryKeys.remove(key)
+                return
+            }
+            mergeExplorePlaces(places)
+            mergeSelectedExplorePlaces(places)
+            loadingExploreCategoryKeys.remove(key)
+        }
+    }
+
+    private func loadSelectedExplorePlaces(generation: UUID) async {
+        for activity in selectedActivityTypes {
+            await loadExplorePlaces(for: activity, generation: generation)
+        }
+        for landmark in selectedLandmarkTypes {
+            await loadExplorePlaces(for: landmark, generation: generation)
+        }
+    }
+
+    private func removeExplorePlaces(for activity: ActivityType) {
+        removeExplorePlaces(type: .activity, category: activity.searchQuery.capitalized)
+    }
+
+    private func removeExplorePlaces(for landmark: LandmarkType) {
+        removeExplorePlaces(type: .landmark, category: landmark.searchQuery.capitalized)
+    }
+
+    private func removeExplorePlaces(type: ExplorePlace.PlaceType, category: String) {
+        let key = exploreCategoryKey(type: type, category: category)
+        selectedExplorePlaces.removeAll {
+            exploreCategoryKey(type: $0.placeType, category: $0.category) == key
         }
     }
 
     private func loadNearby(coordinate: CLLocationCoordinate2D) async {
+        let seedResults = await ZabihahService.searchAppleMaps(
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+            queries: [
+                "halal restaurant",
+                "halal food",
+                "halal grocery",
+                "halal meat",
+                "middle eastern restaurant",
+                "mediterranean restaurant",
+                "ice cream",
+                "dessert",
+                "cafe"
+            ]
+        )
+        if !seedResults.isEmpty {
+            await MainActor.run { restaurants = seedResults }
+        }
+
         let results = await ZabihahService.shared.fetchCombined(
             latitude: coordinate.latitude,
             longitude: coordinate.longitude
@@ -813,55 +1059,79 @@ struct ExploreMapView: View {
         await MainActor.run { mosques = results }
     }
 
-    private func loadAllExplorePlaces() async {
-        async let activityResults = withTaskGroup(of: [ExplorePlace].self) { group -> [ExplorePlace] in
-            for activity in ActivityType.allCases {
-                group.addTask { await self.fetchPlaces(type: .activity, query: activity.searchQuery, poiCategories: activity.poiCategories) }
-            }
-            var results: [ExplorePlace] = []
-            for await batch in group { results.append(contentsOf: batch) }
-            return results
-        }
-        async let landmarkResults = withTaskGroup(of: [ExplorePlace].self) { group -> [ExplorePlace] in
-            for landmark in LandmarkType.allCases {
-                group.addTask { await self.fetchPlaces(type: .landmark, query: landmark.searchQuery, poiCategories: landmark.poiCategories) }
-            }
-            var results: [ExplorePlace] = []
-            for await batch in group { results.append(contentsOf: batch) }
-            return results
-        }
-
-        let activities = await activityResults
-        let landmarks = await landmarkResults
-
-        var seen: Set<String> = []
-        var deduped: [ExplorePlace] = []
-        for place in activities + landmarks {
-            let key = place.name.lowercased()
+    private func mergeExplorePlaces(_ places: [ExplorePlace]) {
+        var merged = allExplorePlaces
+        var seen = Set(merged.map { explorePlaceKey($0) })
+        for place in places {
+            let key = explorePlaceKey(place)
             if !seen.contains(key) {
                 seen.insert(key)
-                deduped.append(place)
+                merged.append(place)
             }
         }
-        await MainActor.run { allExplorePlaces = deduped }
+        allExplorePlaces = merged
     }
 
-    private func fetchPlaces(type: ExplorePlace.PlaceType, query: String, poiCategories: [MKPointOfInterestCategory] = []) async -> [ExplorePlace] {
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = query
-        request.region = MKCoordinateRegion(
+    private func mergeSelectedExplorePlaces(_ places: [ExplorePlace]) {
+        var merged = selectedExplorePlaces
+        var seen = Set(merged.map { explorePlaceKey($0) })
+        for place in places {
+            let key = explorePlaceKey(place)
+            if !seen.contains(key) {
+                seen.insert(key)
+                merged.append(place)
+            }
+        }
+        selectedExplorePlaces = merged
+    }
+
+    private func explorePlaceKey(_ place: ExplorePlace) -> String {
+        "\(place.placeType.rawValue)-\(place.category)-\(place.name)".lowercased()
+    }
+
+    private func exploreCategoryKey(type: ExplorePlace.PlaceType, category: String) -> String {
+        "\(type.rawValue)-\(category)".lowercased()
+    }
+
+    private func fetchPlaces(type: ExplorePlace.PlaceType, query: String, icon: String, poiCategories: [MKPointOfInterestCategory] = []) async -> [ExplorePlace] {
+        let region = MKCoordinateRegion(
             center: mapCenter,
             span: MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)
         )
+        let expandedRegion = MKCoordinateRegion(
+            center: mapCenter,
+            span: MKCoordinateSpan(latitudeDelta: 0.35, longitudeDelta: 0.35)
+        )
+
+        var items = await searchMapItems(query: query, region: region, poiCategories: poiCategories)
+        if items.isEmpty {
+            items = await searchMapItems(query: query, region: expandedRegion, poiCategories: poiCategories)
+        }
+        if items.isEmpty && !poiCategories.isEmpty {
+            items = await searchMapItems(query: query, region: region, poiCategories: [])
+        }
+        if items.isEmpty && !poiCategories.isEmpty {
+            items = await searchMapItems(query: query, region: expandedRegion, poiCategories: [])
+        }
+
+        return mapItemsToExplorePlaces(items, type: type, query: query, icon: icon)
+    }
+
+    private func searchMapItems(query: String, region: MKCoordinateRegion, poiCategories: [MKPointOfInterestCategory]) async -> [MKMapItem] {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        request.region = region
         request.resultTypes = .pointOfInterest
         if !poiCategories.isEmpty {
             request.pointOfInterestFilter = MKPointOfInterestFilter(including: poiCategories)
         }
 
-        guard let response = try? await MKLocalSearch(request: request).start() else { return [] }
-        return response.mapItems.compactMap { item -> ExplorePlace? in
-            guard let name = item.name,
-                  item.pointOfInterestCategory != nil else { return nil }
+        return (try? await MKLocalSearch(request: request).start())?.mapItems ?? []
+    }
+
+    private func mapItemsToExplorePlaces(_ items: [MKMapItem], type: ExplorePlace.PlaceType, query: String, icon: String) -> [ExplorePlace] {
+        items.compactMap { item -> ExplorePlace? in
+            guard let name = item.name else { return nil }
             let address = [
                 item.placemark.subThoroughfare,
                 item.placemark.thoroughfare,
@@ -873,10 +1143,12 @@ struct ExploreMapView: View {
                 address: address.isEmpty ? "Nearby" : address,
                 coordinate: item.placemark.coordinate,
                 category: query.capitalized,
+                icon: icon,
                 placeType: type
             )
         }
     }
+
 }
 
 // MARK: - Filter Chip
@@ -945,6 +1217,30 @@ struct CafeMapPin: View {
     }
 }
 
+// MARK: - Dessert Map Pin
+
+struct DessertMapPin: View {
+    private let pinColor = Color.pink.opacity(0.8)
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(pinColor)
+                .frame(width: 36, height: 36)
+                .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+            Image(systemName: "birthday.cake.fill")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .overlay(alignment: .bottom) {
+            Triangle()
+                .fill(pinColor)
+                .frame(width: 10, height: 7)
+                .offset(y: 7)
+        }
+    }
+}
+
 // MARK: - Grocery Map Pin
 
 struct GroceryMapPin: View {
@@ -993,32 +1289,16 @@ struct MosqueMapPin: View {
 
 // MARK: - Activity Map Pin
 
-struct ActivityMapPin: View {
-    private let pinColor = Color.purple.opacity(0.8)
+struct ExplorePlaceMapPin: View {
+    let icon: String
+    let placeType: ExplorePlace.PlaceType
 
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(pinColor)
-                .frame(width: 36, height: 36)
-                .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-            Image(systemName: "figure.walk")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white)
-        }
-        .overlay(alignment: .bottom) {
-            Triangle()
-                .fill(pinColor)
-                .frame(width: 10, height: 7)
-                .offset(y: 7)
+    private var pinColor: Color {
+        switch placeType {
+        case .activity: return Theme.pinCultural
+        case .landmark: return Theme.info
         }
     }
-}
-
-// MARK: - Landmark Map Pin
-
-struct LandmarkMapPin: View {
-    private let pinColor = Color.indigo.opacity(0.8)
 
     var body: some View {
         ZStack {
@@ -1026,8 +1306,8 @@ struct LandmarkMapPin: View {
                 .fill(pinColor)
                 .frame(width: 36, height: 36)
                 .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-            Image(systemName: "building.columns.fill")
-                .font(.system(size: 14, weight: .bold))
+            Text(icon)
+                .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(.white)
         }
         .overlay(alignment: .bottom) {
@@ -1068,6 +1348,8 @@ struct ZabihahRestaurantSheet: View {
     @State private var showAddSheet = false
     @State private var showSwapSheet = false
     @State private var travel: TravelInfo?
+    @State private var photoURLs: [URL] = []
+    @State private var loadingPhotos = false
 
     var body: some View {
         ScrollView {
@@ -1075,7 +1357,7 @@ struct ZabihahRestaurantSheet: View {
                 header
                 addressRow
                 ratingsRow
-                if !restaurant.isCafe && restaurant.isRestaurant {
+                if !restaurant.isCafe && !restaurant.isDessertShop && restaurant.isRestaurant {
                     halalBadge
                 }
 
@@ -1099,6 +1381,7 @@ struct ZabihahRestaurantSheet: View {
         }
         .task { await lookUpDetails() }
         .task { await loadTravel() }
+        .task { await loadPhotos() }
         .sheet(isPresented: $showMenuSheet) { menuSheet }
         .sheet(isPresented: $showAddSheet) {
             AddToItinerarySheet(restaurant: restaurant, itineraries: $itineraries)
@@ -1123,7 +1406,7 @@ struct ZabihahRestaurantSheet: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 6) {
-                if !restaurant.isCafe && restaurant.isRestaurant {
+                if !restaurant.isCafe && !restaurant.isDessertShop && restaurant.isRestaurant {
                     ZabihahBadge(status: restaurant.halalStatus)
                 }
 
@@ -1229,14 +1512,22 @@ struct ZabihahRestaurantSheet: View {
             Text("Photos")
                 .font(.headline)
 
-            if restaurant.photoURLs.isEmpty {
+            if loadingPhotos && photoURLs.isEmpty {
+                HStack {
+                    ProgressView()
+                    Text("Loading photos…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 6)
+                }
+            } else if photoURLs.isEmpty {
                 Label("No photos available", systemImage: "photo.on.rectangle.angled")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
-                        ForEach(restaurant.photoURLs, id: \.absoluteString) { url in
+                        ForEach(photoURLs, id: \.absoluteString) { url in
                             AsyncImage(url: url) { phase in
                                 switch phase {
                                 case .success(let image):
@@ -1556,6 +1847,24 @@ struct ZabihahRestaurantSheet: View {
         await MainActor.run {
             phoneNumber = item?.phoneNumber
             loadingPhone = false
+        }
+    }
+
+    private func loadPhotos() async {
+        if !restaurant.photoURLs.isEmpty {
+            await MainActor.run { photoURLs = restaurant.photoURLs }
+            return
+        }
+        await MainActor.run { loadingPhotos = true }
+        let urls = await YelpService.shared.fetchPhotoURLs(
+            name: restaurant.name,
+            address: restaurant.address,
+            latitude: restaurant.latitude,
+            longitude: restaurant.longitude
+        )
+        await MainActor.run {
+            photoURLs = urls
+            loadingPhotos = false
         }
     }
 
