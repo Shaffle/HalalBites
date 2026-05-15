@@ -1,82 +1,268 @@
-from flask import Flask, request, jsonify
+from collections import OrderedDict
+from flask import Flask, jsonify, request
 from scrapling import Fetcher
 import json
+import math
+import os
+import queue
 import re
+import threading
+import time
 import traceback
+from urllib.parse import quote_plus, urljoin
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", 64 * 1024))
 
-fetcher = Fetcher(auto_match=True)
+API_KEY = os.environ.get("SAFABITES_API_KEY", "").strip()
+FETCH_TIMEOUT_SECONDS = float(os.environ.get("FETCH_TIMEOUT_SECONDS", "6"))
+CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", "600"))
+CACHE_MAX_ITEMS = int(os.environ.get("CACHE_MAX_ITEMS", "256"))
+RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
+RATE_LIMIT_MAX_REQUESTS = int(os.environ.get("RATE_LIMIT_MAX_REQUESTS", "60"))
+DOORDASH_SEARCH_LIMIT = int(os.environ.get("DOORDASH_SEARCH_LIMIT", "5"))
+MAX_RESTAURANT_RESULTS = int(os.environ.get("MAX_RESTAURANT_RESULTS", "80"))
+
+cache_lock = threading.Lock()
+response_cache = OrderedDict()
+rate_lock = threading.Lock()
+rate_buckets = {}
+
+try:
+    Fetcher.configure(auto_match=True)
+except Exception:
+    pass
+fetcher = Fetcher()
 
 stealth = None
 try:
     from scrapling import StealthyFetcher
-    stealth = StealthyFetcher(auto_match=True)
+    try:
+        StealthyFetcher.configure(auto_match=True)
+    except Exception:
+        pass
+    stealth = StealthyFetcher()
     print("StealthyFetcher available")
 except Exception as e:
     print(f"StealthyFetcher not available ({e}), using Fetcher only")
 
 
+@app.route("/", methods=["GET", "HEAD"])
+def health():
+    return jsonify({"status": "ok"})
+
+
+@app.before_request
+def enforce_api_controls():
+    if not request.path.startswith("/api/"):
+        return None
+
+    if API_KEY and request.headers.get("X-API-Key") != API_KEY:
+        return jsonify({"error": "unauthorized"}), 401
+
+    client_id = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+    now = time.time()
+    with rate_lock:
+        bucket = [ts for ts in rate_buckets.get(client_id, []) if now - ts < RATE_LIMIT_WINDOW_SECONDS]
+        if len(bucket) >= RATE_LIMIT_MAX_REQUESTS:
+            rate_buckets[client_id] = bucket
+            return jsonify({"error": "rate limit exceeded"}), 429
+        bucket.append(now)
+        rate_buckets[client_id] = bucket
+    return None
+
+
+def bounded_fetch(fetch_func, url):
+    result_queue = queue.Queue(maxsize=1)
+
+    def run_fetch():
+        try:
+            result_queue.put((fetch_func(url), None))
+        except Exception as exc:
+            result_queue.put((None, exc))
+
+    worker = threading.Thread(target=run_fetch, daemon=True)
+    worker.start()
+    worker.join(FETCH_TIMEOUT_SECONDS)
+
+    if worker.is_alive():
+        raise TimeoutError(f"fetch timed out after {FETCH_TIMEOUT_SECONDS}s: {url}")
+
+    result, error = result_queue.get_nowait()
+    if error:
+        raise error
+    return result
+
+
 def smart_get(url, prefer_stealth=False):
     if prefer_stealth and stealth:
         try:
-            return stealth.get(url)
+            return bounded_fetch(stealth.get, url)
+        except TimeoutError:
+            raise
         except Exception as e:
             print(f"StealthyFetcher failed for {url}: {e}")
-    return fetcher.get(url)
+    return bounded_fetch(fetcher.get, url)
 
 
-# ──────────────────────────────────────────────
-# ENDPOINTS
-# ──────────────────────────────────────────────
+def request_payload():
+    payload = request.get_json(silent=True) or {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def sanitize_text(value, max_length=160):
+    return " ".join(str(value or "").split())[:max_length]
+
+
+def parse_coordinates(payload):
+    try:
+        lat = float(payload.get("latitude"))
+        lng = float(payload.get("longitude"))
+    except (TypeError, ValueError):
+        return None, None
+
+    if not math.isfinite(lat) or not math.isfinite(lng):
+        return None, None
+    if not -90 <= lat <= 90 or not -180 <= lng <= 180:
+        return None, None
+    return lat, lng
+
+
+def parse_optional_coordinates(payload):
+    has_lat = payload.get("latitude") not in (None, "")
+    has_lng = payload.get("longitude") not in (None, "")
+    if not has_lat and not has_lng:
+        return None, None, True
+    lat, lng = parse_coordinates(payload)
+    return lat, lng, lat is not None and lng is not None
+
+
+def cache_key(name, payload):
+    stable_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return f"{name}:{stable_payload}"
+
+
+def cache_get(key):
+    now = time.time()
+    with cache_lock:
+        entry = response_cache.get(key)
+        if not entry:
+            return None
+        stored_at, value = entry
+        if now - stored_at > CACHE_TTL_SECONDS:
+            response_cache.pop(key, None)
+            return None
+        response_cache.move_to_end(key)
+        return value
+
+
+def cache_set(key, value):
+    with cache_lock:
+        response_cache[key] = (time.time(), value)
+        response_cache.move_to_end(key)
+        while len(response_cache) > CACHE_MAX_ITEMS:
+            response_cache.popitem(last=False)
+
 
 @app.route("/api/restaurants", methods=["POST"])
 def get_restaurants():
     try:
-        lat = request.json.get("latitude")
-        lng = request.json.get("longitude")
-        if not lat or not lng:
-            return jsonify({"error": "latitude and longitude required"}), 400
+        payload = request_payload()
+        lat, lng = parse_coordinates(payload)
+        if lat is None or lng is None:
+            return jsonify({"error": "valid latitude and longitude required"}), 400
+
+        key = cache_key("restaurants", {"latitude": round(lat, 4), "longitude": round(lng, 4)})
+        cached = cache_get(key)
+        if cached is not None:
+            return jsonify(cached)
 
         zabihah = scrape_zabihah(lat, lng)
-        yelp = scrape_yelp(lat, lng)
-        merged = merge_results(zabihah, yelp)
-        return jsonify({"restaurants": merged})
+        doordash = scrape_doordash(lat, lng)
+        response = {"restaurants": merge_results(zabihah, doordash)}
+        cache_set(key, response)
+        return jsonify(response)
     except Exception as e:
         print(f"Error in /api/restaurants: {e}")
         traceback.print_exc()
-        return jsonify({"restaurants": [], "error": str(e)})
+        return jsonify({"restaurants": [], "error": "restaurant lookup failed"}), 500
 
 
 @app.route("/api/zabihah", methods=["POST"])
 def zabihah_only():
-    lat = request.json.get("latitude")
-    lng = request.json.get("longitude")
-    if not lat or not lng:
-        return jsonify({"error": "latitude and longitude required"}), 400
-    return jsonify({"restaurants": scrape_zabihah(lat, lng)})
+    payload = request_payload()
+    lat, lng = parse_coordinates(payload)
+    if lat is None or lng is None:
+        return jsonify({"error": "valid latitude and longitude required"}), 400
+    response = {"restaurants": scrape_zabihah(lat, lng)}
+    return jsonify(response)
 
 
 @app.route("/api/menu", methods=["POST"])
 def get_menu():
     try:
-        name = request.json.get("name", "")
-        address = request.json.get("address", "")
-        lat = request.json.get("latitude")
-        lng = request.json.get("longitude")
+        payload = request_payload()
+        name = sanitize_text(payload.get("name", ""))
+        address = sanitize_text(payload.get("address", ""), max_length=240)
+        lat, lng, valid_coordinates = parse_optional_coordinates(payload)
+        if not valid_coordinates:
+            return jsonify({"error": "latitude and longitude must both be valid when provided"}), 400
         if not name:
             return jsonify({"error": "name is required"}), 400
-        menu = scrape_menu(name, address, lat, lng)
-        return jsonify({"menu": menu})
+
+        key = cache_key("menu", {"name": name.lower(), "address": address.lower(), "latitude": lat, "longitude": lng})
+        cached = cache_get(key)
+        if cached is not None:
+            return jsonify(cached)
+
+        response = {"menu": scrape_menu(name, address, lat, lng)}
+        cache_set(key, response)
+        return jsonify(response)
     except Exception as e:
         print(f"Error in /api/menu: {e}")
         traceback.print_exc()
-        return jsonify({"menu": [], "error": str(e)})
+        return jsonify({"menu": [], "error": "menu lookup failed"}), 500
 
 
-# ──────────────────────────────────────────────
-# JSON ARRAY EXTRACTION (bracket matching)
-# ──────────────────────────────────────────────
+@app.route("/api/doordash/enrich", methods=["POST"])
+def get_doordash_enrichment():
+    try:
+        payload = request_payload()
+        name = sanitize_text(payload.get("name", ""))
+        address = sanitize_text(payload.get("address", ""), max_length=240)
+        lat, lng, valid_coordinates = parse_optional_coordinates(payload)
+        if not valid_coordinates:
+            return jsonify({"error": "latitude and longitude must both be valid when provided"}), 400
+        if not name:
+            return jsonify({"error": "name is required"}), 400
+
+        response = {"enrichment": scrape_doordash_enrichment(name, address, lat, lng)}
+        return jsonify(response)
+    except Exception as e:
+        print(f"Error in /api/doordash/enrich: {e}")
+        traceback.print_exc()
+        return jsonify({"enrichment": {}, "error": "DoorDash enrichment failed"}), 500
+
+
+@app.route("/api/doordash/photos", methods=["POST"])
+def get_doordash_photos():
+    try:
+        payload = request_payload()
+        name = sanitize_text(payload.get("name", ""))
+        address = sanitize_text(payload.get("address", ""), max_length=240)
+        lat, lng, valid_coordinates = parse_optional_coordinates(payload)
+        if not valid_coordinates:
+            return jsonify({"error": "latitude and longitude must both be valid when provided"}), 400
+        if not name:
+            return jsonify({"error": "name is required"}), 400
+
+        enrichment = scrape_doordash_enrichment(name, address, lat, lng)
+        return jsonify({"photos": enrichment.get("photos", [])})
+    except Exception as e:
+        print(f"Error in /api/doordash/photos: {e}")
+        traceback.print_exc()
+        return jsonify({"photos": [], "error": "DoorDash photo lookup failed"}), 500
+
 
 def extract_json_array(text, key):
     marker = f'"{key}":'
@@ -84,48 +270,42 @@ def extract_json_array(text, key):
     if idx == -1:
         return None
 
-    start = text.find('[', idx + len(marker))
+    start = text.find("[", idx + len(marker))
     if start == -1:
         return None
 
     depth = 0
     in_string = False
     escaped = False
-
-    for i in range(start, min(start + 500000, len(text))):
-        c = text[i]
+    for index in range(start, min(start + 500000, len(text))):
+        char = text[index]
         if escaped:
             escaped = False
             continue
-        if c == '\\':
+        if char == "\\":
             escaped = True
             continue
-        if c == '"':
+        if char == '"':
             in_string = not in_string
             continue
-        if not in_string:
-            if c == '[':
-                depth += 1
-            elif c == ']':
-                depth -= 1
-                if depth == 0:
-                    try:
-                        return json.loads(text[start:i + 1])
-                    except json.JSONDecodeError as e:
-                        print(f"JSON parse failed for {key}: {e}")
-                        return None
+        if in_string:
+            continue
+        if char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[start:index + 1])
+                except json.JSONDecodeError as e:
+                    print(f"JSON parse failed for {key}: {e}")
+                    return None
     return None
 
 
-# ──────────────────────────────────────────────
-# ZABIHAH SCRAPING
-# ──────────────────────────────────────────────
-
 def scrape_zabihah(lat, lng):
     try:
-        url = f"https://www.zabihah.com/search?lat={lat}&lng={lng}"
-        page = fetcher.get(url)
-
+        page = smart_get(f"https://www.zabihah.com/search?lat={lat}&lng={lng}")
         html = ""
         for script in page.css("script"):
             text = script.text or ""
@@ -138,697 +318,440 @@ def scrape_zabihah(lat, lng):
             html = body.html if body else ""
 
         if "initialRestaurants" in html:
-            unescaped = html.replace('\\"', '"').replace('\\\\', '\\')
-            restaurants = extract_json_array(unescaped, "initialRestaurants")
+            restaurants = extract_json_array(html.replace('\\"', '"').replace("\\\\", "\\"), "initialRestaurants")
             if restaurants:
-                print(f"Zabihah: found {len(restaurants)} restaurants")
-                return enrich_zabihah(restaurants, page)
-
-        print("Zabihah: no initialRestaurants found, trying HTML fallback")
-        return parse_zabihah_html(page)
+                return restaurants[:MAX_RESTAURANT_RESULTS]
+        return []
     except Exception as e:
         print(f"Zabihah error: {e}")
         traceback.print_exc()
         return []
 
 
-def enrich_zabihah(restaurants, page):
-    try:
-        for card in page.css("[class*='restaurant'], [class*='listing'], [data-id]"):
-            data_id = card.attrib.get("data-id", "")
-            if not data_id:
-                continue
-            for r in restaurants:
-                if r.get("id") == data_id:
-                    desc_el = card.css_first("[class*='desc'], [class*='summary'], p")
-                    if desc_el and desc_el.text:
-                        if not r.get("halalSummary"):
-                            r["halalSummary"] = {}
-                        if not r["halalSummary"].get("description"):
-                            r["halalSummary"]["description"] = desc_el.text.strip()
-
-                    img_el = card.css_first("img[src*='http']")
-                    if img_el and not r.get("coverImage"):
-                        r["coverImage"] = img_el.attrib.get("src", "")
-    except Exception:
-        pass
-    return restaurants
-
-
-def parse_zabihah_html(page):
-    restaurants = []
-    for card in page.css("[class*='restaurant'], [class*='listing'], .card"):
-        try:
-            name_el = card.css_first("h2, h3, h4, [class*='name'], [class*='title']")
-            addr_el = card.css_first("[class*='address'], [class*='location'], address")
-            if not name_el:
-                continue
-            restaurants.append({
-                "id": f"zab-html-{len(restaurants)}",
-                "name": (name_el.text or "").strip(),
-                "address": (addr_el.text or "").strip() if addr_el else "Nearby",
-                "latitude": "0",
-                "longitude": "0",
-                "cuisine": [],
-                "rating": None,
-                "reviewCount": 0,
-                "handSlaughtered": False,
-                "restaurantType": 1,
-                "coverImage": None,
-                "galleryPhotos": [],
-                "businessHours": [],
-                "halalSummary": {"description": "From Zabihah", "meatHalalStatus": None}
-            })
-        except Exception:
-            continue
-    return restaurants
-
-
-# ──────────────────────────────────────────────
-# YELP SCRAPING
-# ──────────────────────────────────────────────
-
-def scrape_yelp(lat, lng):
-    try:
-        results = []
-        seen = set()
-
-        for query in [
-            "halal+restaurant", "halal+food", "halal+grocery", "halal+meat",
-            "halal+cafe", "halal+bakery", "halal+coffee",
-            "mediterranean+restaurant", "middle+eastern+restaurant",
-            "pakistani+restaurant", "afghan+restaurant", "turkish+restaurant",
-            "lebanese+restaurant", "moroccan+restaurant", "persian+restaurant",
-            "shawarma", "kebab", "falafel", "biryani",
-            "indian+restaurant", "somali+restaurant", "yemeni+restaurant"
-        ]:
-            url = f"https://www.yelp.com/search?find_desc={query}&latitude={lat}&longitude={lng}"
-            page = smart_get(url, prefer_stealth=True)
-
-            for script in page.css("script[type='application/json']"):
-                text = script.text or ""
-                try:
-                    data = json.loads(text)
-                    for biz in find_businesses(data):
-                        bid = biz.get("id") or biz.get("bizId", "")
-                        if bid and bid not in seen:
-                            seen.add(bid)
-                            results.append(normalize_yelp(biz))
-                except (json.JSONDecodeError, Exception):
-                    pass
-
-            for script in page.css("script[type='application/ld+json']"):
-                text = script.text or ""
-                try:
-                    ld = json.loads(text)
-                    if isinstance(ld, list):
-                        for item in ld:
-                            biz = extract_ld_business(item)
-                            if biz and biz.get("id") not in seen:
-                                seen.add(biz["id"])
-                                results.append(biz)
-                    elif isinstance(ld, dict):
-                        biz = extract_ld_business(ld)
-                        if biz and biz.get("id") not in seen:
-                            seen.add(biz["id"])
-                            results.append(biz)
-                except Exception:
-                    pass
-
-            if not results:
-                for card in page.css("[data-testid*='serp'], [class*='container'] [class*='business']"):
-                    try:
-                        name_el = card.css_first("a[href*='/biz/'], h3, [class*='businessName']")
-                        rating_el = card.css_first("[aria-label*='star'], [class*='rating']")
-                        review_el = card.css_first("[class*='reviewCount'], span")
-                        addr_el = card.css_first("[class*='address'], address, span[class*='secondary']")
-                        img_el = card.css_first("img[src*='http']")
-
-                        if not name_el:
-                            continue
-
-                        name = (name_el.text or "").strip()
-                        if not name or name in seen:
-                            continue
-                        seen.add(name)
-
-                        rating = ""
-                        if rating_el:
-                            label = rating_el.attrib.get("aria-label", "")
-                            rmatch = re.search(r'([\d.]+)\s*star', label)
-                            rating = rmatch.group(1) if rmatch else ""
-
-                        review_count = 0
-                        if review_el:
-                            rmatch = re.search(r'(\d+)', review_el.text or "")
-                            review_count = int(rmatch.group(1)) if rmatch else 0
-
-                        results.append({
-                            "id": f"yelp-html-{len(results)}",
-                            "name": name,
-                            "address": (addr_el.text or "").strip() if addr_el else "Nearby",
-                            "latitude": str(lat),
-                            "longitude": str(lng),
-                            "cuisine": ["Halal"],
-                            "rating": rating,
-                            "reviewCount": review_count,
-                            "handSlaughtered": False,
-                            "restaurantType": 1,
-                            "coverImage": img_el.attrib.get("src", "") if img_el else None,
-                            "galleryPhotos": [],
-                            "businessHours": [],
-                            "halalSummary": {
-                                "description": "Found on Yelp - verify halal status",
-                                "meatHalalStatus": None
-                            }
-                        })
-                    except Exception:
-                        continue
-
-        print(f"Yelp: found {len(results)} restaurants")
-        return results
-    except Exception as e:
-        print(f"Yelp error: {e}")
-        traceback.print_exc()
-        return []
-
-
-def extract_ld_business(ld):
-    if ld.get("@type") not in ("Restaurant", "FoodEstablishment", "LocalBusiness"):
-        return None
-    geo = ld.get("geo", {})
-    addr = ld.get("address", {})
-    return {
-        "id": f"yelp-ld-{ld.get('name', '')}",
-        "name": ld.get("name", ""),
-        "address": f"{addr.get('streetAddress', '')}, {addr.get('addressLocality', '')}",
-        "latitude": str(geo.get("latitude", 0)),
-        "longitude": str(geo.get("longitude", 0)),
-        "cuisine": [ld.get("servesCuisine", "Halal")] if ld.get("servesCuisine") else ["Halal"],
-        "rating": str(ld.get("aggregateRating", {}).get("ratingValue", "")),
-        "reviewCount": ld.get("aggregateRating", {}).get("reviewCount", 0),
-        "handSlaughtered": False,
-        "restaurantType": 1,
-        "coverImage": ld.get("image"),
-        "galleryPhotos": [],
-        "businessHours": [],
-        "halalSummary": {
-            "description": "Found on Yelp - verify halal status",
-            "meatHalalStatus": None
-        }
-    }
-
-
-def find_businesses(data, depth=0):
-    if depth > 10:
-        return []
-    if isinstance(data, dict):
-        if "name" in data and ("rating" in data or "reviewCount" in data or "review_count" in data):
-            if "coordinates" in data or "latitude" in data:
-                return [data]
-        results = []
-        for v in data.values():
-            results.extend(find_businesses(v, depth + 1))
-        return results
-    elif isinstance(data, list):
-        results = []
-        for item in data:
-            results.extend(find_businesses(item, depth + 1))
-        return results
-    return []
-
-
-def normalize_yelp(biz):
-    coords = biz.get("coordinates", {})
-    location = biz.get("location", {})
-    categories = biz.get("categories", [])
-
-    parts = [location.get("address1"), location.get("city"), location.get("state")]
-    address = ", ".join(p for p in parts if p) or "Nearby"
-
-    photos = []
-    if biz.get("photos"):
-        photos = biz["photos"]
-    elif biz.get("imageUrl") or biz.get("image_url"):
-        photos = [biz.get("imageUrl") or biz.get("image_url")]
-
-    cuisine = []
-    for cat in categories:
-        if isinstance(cat, dict):
-            cuisine.append(cat.get("title", cat.get("alias", "")))
-        elif isinstance(cat, str):
-            cuisine.append(cat)
-
-    hours = []
-    for h in biz.get("hours", []):
-        for slot in h.get("open", []):
-            day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-            day_idx = slot.get("day", 0)
-            day = day_names[day_idx] if day_idx < len(day_names) else "Unknown"
-            start = format_time(slot.get("start", ""))
-            end = format_time(slot.get("end", ""))
-            hours.append({"day": day, "hours": f"{start} - {end}"})
-
-    return {
-        "id": f"yelp-{biz.get('id', '')}",
-        "name": biz.get("name", ""),
-        "address": address,
-        "latitude": str(coords.get("latitude", biz.get("latitude", 0))),
-        "longitude": str(coords.get("longitude", biz.get("longitude", 0))),
-        "cuisine": cuisine or ["Halal"],
-        "rating": str(biz.get("rating", "")),
-        "reviewCount": biz.get("reviewCount") or biz.get("review_count", 0),
-        "handSlaughtered": False,
-        "restaurantType": 1,
-        "coverImage": photos[0] if photos else None,
-        "galleryPhotos": photos[1:] if len(photos) > 1 else [],
-        "businessHours": hours,
-        "halalSummary": {
-            "description": "Found on Yelp - verify halal status",
-            "meatHalalStatus": None
-        }
-    }
-
-
-# ──────────────────────────────────────────────
-# MENU SCRAPING
-# ──────────────────────────────────────────────
-
-def scrape_menu(name, address, lat, lng):
-    menu = scrape_yelp_menu(name, address, lat, lng)
-    if menu:
-        return menu
-
-    menu = scrape_restaurant_website_menu(name, address, lat, lng)
-    if menu:
-        return menu
-
-    menu = scrape_google_menu(name, address)
-    if menu:
-        return menu
-
-    return []
-
-
-def scrape_yelp_menu(name, address, lat, lng):
-    try:
-        query = f"{name}".replace(" ", "+")
-        url = f"https://www.yelp.com/search?find_desc={query}&latitude={lat}&longitude={lng}"
-        page = smart_get(url, prefer_stealth=True)
-
-        biz_alias = None
-
-        for a in page.css("a[href*='/biz/']"):
-            href = a.attrib.get("href", "")
-            if "/biz/" in href:
-                alias = href.split("/biz/")[1].split("?")[0].split("#")[0]
-                if alias and len(alias) > 2:
-                    biz_alias = alias
-                    break
-
-        if not biz_alias:
-            for script in page.css("script[type='application/json']"):
-                text = script.text or ""
-                try:
-                    data = json.loads(text)
-                    aliases = find_values(data, ["alias", "businessUrl", "bizId"])
-                    for a in aliases:
-                        if isinstance(a, str) and len(a) > 2 and "/" not in a:
-                            biz_alias = a
-                            break
-                    if biz_alias:
-                        break
-                except Exception:
-                    pass
-
-        if not biz_alias:
-            print(f"Yelp menu: no business alias found for '{name}'")
-            return None
-
-        print(f"Yelp menu: found alias '{biz_alias}', fetching menu page")
-        menu_url = f"https://www.yelp.com/menu/{biz_alias}"
-        menu_page = smart_get(menu_url, prefer_stealth=True)
-
-        categories = []
-        current_cat = None
-
-        for section in menu_page.css("section, [class*='menu-section'], [class*='MenuSection']"):
-            heading = section.css_first("h2, h3, h4, [class*='heading'], [class*='title']")
-            if heading and heading.text:
-                cat_name = heading.text.strip()
-                if len(cat_name) < 60:
-                    current_cat = {"category": cat_name, "items": []}
-                    categories.append(current_cat)
-
-            for item in section.css("[class*='menu-item'], [class*='MenuItem'], li, [class*='dish']"):
-                item_name = item.css_first("h3, h4, [class*='name'], [class*='title'], strong, b")
-                item_price = item.css_first("[class*='price'], [class*='Price']")
-                item_desc = item.css_first("p, [class*='desc'], [class*='description']")
-
-                if item_name and item_name.text:
-                    menu_item = {
-                        "name": item_name.text.strip(),
-                        "price": (item_price.text or "").strip() if item_price else "",
-                        "description": (item_desc.text or "").strip() if item_desc else ""
-                    }
-                    if current_cat:
-                        current_cat["items"].append(menu_item)
-                    else:
-                        current_cat = {"category": "Menu", "items": [menu_item]}
-                        categories.append(current_cat)
-
-        if not any(cat["items"] for cat in categories):
-            categories = extract_menu_from_json(menu_page)
-
-        if not any(cat.get("items") for cat in categories):
-            categories = parse_menu_from_text(menu_page)
-
-        if not any(cat.get("items") for cat in categories):
-            biz_url = f"https://www.yelp.com/biz/{biz_alias}"
-            biz_page = smart_get(biz_url, prefer_stealth=True)
-            categories = extract_popular_from_biz(biz_page)
-
-        has_items = any(cat.get("items") for cat in categories)
-        print(f"Yelp menu: {'found' if has_items else 'no'} menu items for '{name}'")
-        return categories if has_items else None
-
-    except Exception as e:
-        print(f"Yelp menu error: {e}")
-        traceback.print_exc()
-        return None
-
-
-def scrape_restaurant_website_menu(name, address, lat, lng):
-    try:
-        query = f"{name} {address} official website".replace(" ", "+")
-        search_url = f"https://www.google.com/search?q={query}"
-        page = smart_get(search_url, prefer_stealth=True)
-
-        website_url = None
-        for a in page.css("a[href*='http']"):
-            href = a.attrib.get("href", "")
-            skip = ["yelp.com", "google.com", "facebook.com", "instagram.com",
-                    "tripadvisor.com", "doordash.com", "ubereats.com", "grubhub.com",
-                    "youtube.com", "twitter.com", "tiktok.com"]
-            if any(s in href for s in skip):
-                continue
-            if href.startswith("http") and "." in href:
-                website_url = href
-                break
-
-        if not website_url:
-            return None
-
-        print(f"Website menu: trying {website_url}")
-        site_page = fetcher.get(website_url)
-
-        menu_page = site_page
-        for a in site_page.css("a"):
-            link_text = (a.text or "").lower()
-            href = a.attrib.get("href", "")
-            if "menu" in link_text or "menu" in href.lower():
-                if href.startswith("http"):
-                    menu_url = href
-                elif href.startswith("/"):
-                    from urllib.parse import urljoin
-                    menu_url = urljoin(website_url, href)
-                else:
-                    continue
-                menu_page = fetcher.get(menu_url)
-                break
-
-        categories = []
-        current_cat = None
-
-        for section in menu_page.css("[class*='menu'], [id*='menu'], section, article"):
-            heading = section.css_first("h2, h3, h4")
-            if heading and heading.text and len(heading.text.strip()) < 60:
-                current_cat = {"category": heading.text.strip(), "items": []}
-                categories.append(current_cat)
-
-            for item_el in section.css("li, [class*='item'], [class*='dish'], tr, .row"):
-                name_el = item_el.css_first("h3, h4, h5, strong, b, [class*='name'], [class*='title'], td:first-child")
-                price_el = item_el.css_first("[class*='price'], .price, td:last-child")
-                desc_el = item_el.css_first("p, [class*='desc'], span, td:nth-child(2)")
-
-                item_name = (name_el.text or "").strip() if name_el else ""
-                if item_name and len(item_name) > 2 and len(item_name) < 80:
-                    item = {
-                        "name": item_name,
-                        "price": extract_price(price_el.text if price_el else ""),
-                        "description": (desc_el.text or "").strip()[:200] if desc_el else ""
-                    }
-                    if current_cat:
-                        current_cat["items"].append(item)
-                    else:
-                        current_cat = {"category": "Menu", "items": [item]}
-                        categories.append(current_cat)
-
-        if not any(cat.get("items") for cat in categories):
-            categories = parse_menu_from_text(menu_page)
-
-        has_items = any(cat.get("items") for cat in categories)
-        print(f"Website menu: {'found' if has_items else 'no'} items")
-        return categories if has_items else None
-
-    except Exception as e:
-        print(f"Website menu error: {e}")
-        traceback.print_exc()
-        return None
-
-
-def scrape_google_menu(name, address):
-    try:
-        query = f"{name} {address} menu prices".replace(" ", "+")
-        url = f"https://www.google.com/search?q={query}"
-        page = smart_get(url, prefer_stealth=True)
-
-        items = []
-
-        for el in page.css("[data-attrid*='menu'], [class*='menu'] [class*='item']"):
-            name_el = el.css_first("[class*='name'], [class*='title'], span")
-            price_el = el.css_first("[class*='price'], [class*='cost']")
-            desc_el = el.css_first("[class*='desc'], [class*='detail']")
-
-            item_name = (name_el.text or "").strip() if name_el else ""
-            if item_name and len(item_name) > 2:
-                items.append({
-                    "name": item_name,
-                    "price": extract_price(price_el.text if price_el else ""),
-                    "description": (desc_el.text or "").strip() if desc_el else ""
-                })
-
-        if not items:
-            for el in page.css("span, div, li"):
-                text = (el.text or "").strip()
-                if "$" in text and len(text) > 4 and len(text) < 80:
-                    name_part, price_part = split_name_price(text)
-                    if name_part and len(name_part) > 2:
-                        items.append({"name": name_part, "price": price_part, "description": ""})
-
-        if items:
-            print(f"Google menu: found {len(items)} items")
-            return [{"category": "Menu", "items": items[:25]}]
-        return []
-
-    except Exception as e:
-        print(f"Google menu error: {e}")
-        traceback.print_exc()
-        return []
-
-
-# ──────────────────────────────────────────────
-# HELPERS
-# ──────────────────────────────────────────────
-
-def extract_menu_from_json(page):
-    categories = []
-    for script in page.css("script[type='application/json'], script[type='application/ld+json']"):
-        text = script.text or ""
-        try:
-            data = json.loads(text)
-            items = find_menu_items(data)
-            if items:
-                categories.append({"category": "Menu", "items": items[:30]})
-                break
-        except Exception:
-            pass
-    return categories
-
-
-def find_menu_items(data, depth=0):
-    if depth > 10:
-        return []
-    items = []
-    if isinstance(data, dict):
-        has_name = "name" in data or "title" in data or "itemName" in data
-        has_price = "price" in data or "cost" in data or "amount" in data
-        has_desc = "description" in data or "desc" in data
-
-        if has_name and (has_price or has_desc):
-            name = str(data.get("name") or data.get("title") or data.get("itemName", ""))
-            price = data.get("price") or data.get("cost") or data.get("amount", "")
-            if isinstance(price, dict):
-                price = price.get("amount") or price.get("formatted") or price.get("display", "")
-            desc = str(data.get("description") or data.get("desc", ""))
-
-            if name and len(name) > 1 and len(name) < 80:
-                items.append({"name": name, "price": str(price), "description": desc[:200]})
-
-        if "hasMenuSection" in data:
-            sections = data["hasMenuSection"]
-            if not isinstance(sections, list):
-                sections = [sections]
-            for section in sections:
-                if not isinstance(section, dict):
-                    continue
-                menu_items = section.get("hasMenuItem", [])
-                if not isinstance(menu_items, list):
-                    menu_items = [menu_items]
-                for menu_item in menu_items:
-                    if isinstance(menu_item, dict) and menu_item.get("name"):
-                        offer = menu_item.get("offers", {})
-                        items.append({
-                            "name": menu_item["name"],
-                            "price": str(offer.get("price", "")) if isinstance(offer, dict) else "",
-                            "description": str(menu_item.get("description", ""))[:200]
-                        })
-
-        for v in data.values():
-            items.extend(find_menu_items(v, depth + 1))
-    elif isinstance(data, list):
-        for item in data:
-            items.extend(find_menu_items(item, depth + 1))
-    return items
-
-
-def find_values(data, keys, depth=0):
-    if depth > 8:
-        return []
+def scrape_doordash(lat, lng):
     results = []
-    if isinstance(data, dict):
-        for k, v in data.items():
-            if k in keys and isinstance(v, str):
-                results.append(v)
-            results.extend(find_values(v, keys, depth + 1))
-    elif isinstance(data, list):
-        for item in data:
-            results.extend(find_values(item, keys, depth + 1))
+    seen = set()
+    queries = [
+        "halal restaurant", "halal food", "middle eastern restaurant",
+        "mediterranean restaurant", "pakistani restaurant", "shawarma", "kebab"
+    ][:max(1, DOORDASH_SEARCH_LIMIT)]
+
+    for query in queries:
+        search_url = f"https://www.doordash.com/search/store/{quote_plus(query)}/?event_type=search&lat={lat}&lng={lng}"
+        try:
+            page = smart_get(search_url, prefer_stealth=True)
+        except Exception as e:
+            print(f"DoorDash search skipped for '{query}': {e}")
+            continue
+
+        for restaurant in extract_doordash_restaurants(page, lat, lng):
+            rid = restaurant.get("id") or restaurant.get("name")
+            if rid and rid not in seen:
+                seen.add(rid)
+                results.append(restaurant)
+                if len(results) >= MAX_RESTAURANT_RESULTS:
+                    return results
     return results
 
 
-def parse_menu_from_text(page):
-    raw = page.body.text if page.body else ""
-    lines = [l.strip() for l in raw.split("\n") if l.strip()]
-    items = []
-    for line in lines:
-        if "$" in line and len(line) > 4 and len(line) < 100:
-            name_part, price_part = split_name_price(line)
-            if name_part and len(name_part) > 2:
-                items.append({"name": name_part, "price": price_part, "description": ""})
-    if items:
-        return [{"category": "Menu", "items": items[:25]}]
+def extract_doordash_restaurants(page, lat, lng):
+    restaurants = []
+    for anchor in page.css("a[href*='/store/']"):
+        href = anchor.attrib.get("href", "")
+        text = " ".join((anchor.text or "").split())
+        name = text.split("$")[0].split("•")[0].strip()
+        if not href or "/store/" not in href or not is_likely_restaurant_name(name):
+            continue
+        restaurants.append(doordash_restaurant_payload(name, href, lat, lng))
+
+    for script in page.css("script"):
+        text = normalize_embedded_text(script.text or "")
+        if "/store/" not in text and "storeName" not in text:
+            continue
+        for match in re.finditer(r'"(?:name|storeName|businessName)"\s*:\s*"([^"]{2,80})"([\s\S]{0,1200})', text):
+            name = match.group(1)
+            if not is_likely_restaurant_name(name):
+                continue
+            context = match.group(2)
+            url_match = re.search(r'"(?:url|storeUrl|canonicalUrl)"\s*:\s*"([^"]*/store/[^"]+)"', context)
+            image_match = re.search(r'"(?:imageUrl|image_url|coverImage|headerImageUrl)"\s*:\s*"([^"]+)"', context)
+            restaurant = doordash_restaurant_payload(name, url_match.group(1) if url_match else "", lat, lng)
+            if image_match:
+                restaurant["coverImage"] = image_match.group(1)
+                restaurant["galleryPhotos"] = [image_match.group(1)]
+            restaurants.append(restaurant)
+    return dedupe_restaurants(restaurants)
+
+
+def doordash_restaurant_payload(name, href, lat, lng):
+    url = urljoin("https://www.doordash.com", href) if href else ""
+    slug = href.split("/store/", 1)[1].split("?")[0].strip("/") if "/store/" in href else re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return {
+        "id": f"doordash-{slug}",
+        "name": name,
+        "address": "Nearby",
+        "latitude": str(lat),
+        "longitude": str(lng),
+        "cuisine": ["Halal"],
+        "rating": "",
+        "reviewCount": 0,
+        "handSlaughtered": False,
+        "restaurantType": 1,
+        "coverImage": None,
+        "galleryPhotos": [],
+        "businessHours": [],
+        "doordashUrl": url,
+        "halalSummary": {"description": "Found on DoorDash - verify halal status", "meatHalalStatus": None}
+    }
+
+
+def scrape_menu(name, address, lat, lng):
+    menu = scrape_doordash_menu(name, address, lat, lng)
+    if menu:
+        return menu
+    menu = scrape_restaurant_website_menu(name, address)
+    if menu:
+        return menu
     return []
 
 
-def extract_popular_from_biz(page):
-    items = []
+def scrape_doordash_menu(name, address, lat, lng):
+    try:
+        store_url = find_doordash_store_url_for(name, address, lat, lng)
+        if not store_url:
+            print(f"DoorDash menu: no store found for '{name}'")
+            return []
 
-    for el in page.css("[class*='popular'], [class*='highlight'], [class*='dish'], [aria-label*='menu']"):
-        name_el = el.css_first("p, span, h4, [class*='name']")
-        price_el = el.css_first("[class*='price']")
+        page = smart_get(store_url, prefer_stealth=True)
+        categories = extract_menu_from_json_scripts(page)
+        if categories:
+            return categories
 
-        if name_el and name_el.text:
-            text = name_el.text.strip()
-            if len(text) > 2 and len(text) < 60:
-                items.append({
-                    "name": text,
-                    "price": (price_el.text or "").strip() if price_el else "",
-                    "description": ""
-                })
+        items = menu_items_from_text_blob(normalize_embedded_text(page.body.text if page.body else ""))
+        return [{"category": "DoorDash Menu", "items": items[:40]}] if items else []
+    except Exception as e:
+        print(f"DoorDash menu error: {e}")
+        traceback.print_exc()
+        return []
 
-    for script in page.css("script[type='application/json']"):
-        text = script.text or ""
+
+def find_doordash_store_url_for(name, address, lat=None, lng=None):
+    search_terms = [name, f"{name} {address}".strip()]
+    for term in search_terms:
+        urls = [f"https://www.doordash.com/search/store/{quote_plus(term)}/?event_type=search"]
+        if lat is not None and lng is not None:
+            urls.insert(0, f"https://www.doordash.com/search/store/{quote_plus(term)}/?event_type=search&lat={lat}&lng={lng}")
+
+        for url in urls:
+            try:
+                page = smart_get(url, prefer_stealth=True)
+            except Exception as e:
+                print(f"DoorDash store search skipped: {e}")
+                continue
+            href = find_doordash_store_url(page, name)
+            if href:
+                return urljoin("https://www.doordash.com", href)
+    return None
+
+
+def find_doordash_store_url(page, name):
+    tokens = [token for token in re.split(r"[^a-z0-9]+", (name or "").lower()) if len(token) > 2]
+    for anchor in page.css("a[href*='/store/']"):
+        href = anchor.attrib.get("href", "")
+        text = (anchor.text or "").lower()
+        if href and (not tokens or any(token in text or token in href.lower() for token in tokens)):
+            return href
+
+    for script in page.css("script"):
+        text = normalize_embedded_text(script.text or "")
+        for match in re.finditer(r'"([^"]*/store/[^"#?]+(?:/[^"#?]+)?)"', text):
+            href = match.group(1)
+            lower = href.lower()
+            if not tokens or any(token in lower for token in tokens):
+                return href
+    return None
+
+
+def scrape_doordash_enrichment(name, address, lat, lng):
+    store_url = find_doordash_store_url_for(name, address, lat, lng)
+    if not store_url:
+        return empty_doordash_enrichment()
+    try:
+        page = smart_get(store_url, prefer_stealth=True)
+        return {
+            "rating": None,
+            "review_count": 0,
+            "phone": extract_first_json_value(page, ["phoneNumber", "phone", "telephone"]) or "",
+            "photos": extract_doordash_photos(page),
+            "business_hours": [],
+            "doordash_url": store_url,
+            "categories": extract_first_json_value(page, ["businessTags", "storeTags", "cuisine", "category"]) or ""
+        }
+    except Exception as e:
+        print(f"DoorDash enrichment error: {e}")
+        return empty_doordash_enrichment()
+
+
+def empty_doordash_enrichment():
+    return {"rating": None, "review_count": 0, "phone": "", "photos": [], "business_hours": [], "doordash_url": None, "categories": ""}
+
+
+def extract_doordash_photos(page):
+    photos = []
+    for img in page.css("img[src*='http']"):
+        src = img.attrib.get("src", "")
+        if is_likely_photo_url(src):
+            photos.append(src)
+    for script in page.css("script"):
+        text = normalize_embedded_text(script.text or "")
+        for match in re.finditer(r'"(?:imageUrl|image_url|coverImage|headerImageUrl|storeLogoUrl|photoUrl)"\s*:\s*"([^"]+)"', text):
+            src = match.group(1)
+            if is_likely_photo_url(src):
+                photos.append(src)
+    return dedupe_strings(photos)[:12]
+
+
+def extract_menu_from_json_scripts(page):
+    categories = []
+    for script in page.css("script[type='application/json'], script[type='application/ld+json'], script"):
+        text = normalize_embedded_text(script.text or "")
+        if not any(token in text.lower() for token in ("menu", "displayprice", "baseprice", "itemname", "hasmenuitem")):
+            continue
+        for obj in json_objects_from_text(text):
+            categories.extend(menu_categories_from_object(obj))
+        if categories:
+            return categories[:12]
+        items = menu_items_from_text_blob(text)
+        if items:
+            return [{"category": "Menu", "items": items[:40]}]
+    return []
+
+
+def json_objects_from_text(text):
+    objects = []
+    stripped = text.strip()
+    if stripped.startswith(("{", "[")):
         try:
-            data = json.loads(text)
-            json_items = find_menu_items(data)
-            items.extend(json_items)
+            return [json.loads(stripped)]
         except Exception:
             pass
+    for match in re.finditer(r'(\{[^{}]*(?:"name"|"title"|"displayName"|"itemName")[\s\S]{0,4000}?\})', text):
+        try:
+            objects.append(json.loads(match.group(1)))
+        except Exception:
+            continue
+    return objects
 
+
+def menu_categories_from_object(data):
+    if isinstance(data, list):
+        categories = []
+        for item in data:
+            categories.extend(menu_categories_from_object(item))
+        return categories
+    if not isinstance(data, dict):
+        return []
+
+    category_name = data.get("name") or data.get("title") or data.get("displayName") or data.get("categoryName") or "Menu"
+    for key in ("items", "children", "entities", "menuItems", "menu_items", "hasMenuItem"):
+        if key in data:
+            items = menu_items_from_object(data[key])
+            if items:
+                return [{"category": str(category_name)[:60], "items": items[:40]}]
+
+    categories = []
+    for value in data.values():
+        categories.extend(menu_categories_from_object(value))
+    return categories
+
+
+def menu_items_from_object(data):
+    if isinstance(data, list):
+        items = []
+        for value in data:
+            items.extend(menu_items_from_object(value))
+        return dedupe_menu_items(items)
+    if isinstance(data, dict):
+        item = menu_item_from_dict(data)
+        if item:
+            return [item]
+        items = []
+        for value in data.values():
+            items.extend(menu_items_from_object(value))
+        return dedupe_menu_items(items)
+    return []
+
+
+def menu_item_from_dict(data):
+    name = data.get("name") or data.get("title") or data.get("displayName") or data.get("itemName") or data.get("label")
+    if not is_likely_menu_item_name(name):
+        return None
+    price = data.get("displayPrice") or data.get("price") or data.get("basePrice") or data.get("unitAmount") or ""
+    if isinstance(price, dict):
+        price = price.get("display") or price.get("formatted") or price.get("amount") or ""
+    if isinstance(price, (int, float)) and price > 100:
+        price = f"${price / 100:.2f}"
+    description = data.get("description") or data.get("details") or data.get("summary") or ""
+    return {"name": str(name), "price": str(price), "description": str(description)[:200]}
+
+
+def menu_items_from_text_blob(text):
+    items = []
+    patterns = [
+        r'"(?:name|title|displayName|itemName)"\s*:\s*"([^"]{2,80})"([\s\S]{0,900})',
+        r'(?<![A-Za-z])([A-Z][A-Za-z][A-Za-z &\'’-]{2,60})\s+(\$\d+(?:\.\d{2})?)'
+    ]
+    for pattern in patterns:
+        for match in re.finditer(pattern, text):
+            name = match.group(1)
+            if not is_likely_menu_item_name(name):
+                continue
+            context = match.group(2) if len(match.groups()) > 1 else ""
+            price_match = re.search(r'(?:"displayPrice"|"price"|"basePrice")\s*:\s*"?(\$?[\d,.]+)"?', context)
+            desc_match = re.search(r'"(?:description|details|summary)"\s*:\s*"([^"]{3,200})"', context)
+            price = match.group(2) if pattern.startswith("(?<!") else (price_match.group(1) if price_match else "")
+            items.append({"name": name, "price": price, "description": desc_match.group(1) if desc_match else ""})
+    return dedupe_menu_items(items)
+
+
+def scrape_restaurant_website_menu(name, address):
+    try:
+        page = smart_get(f"https://duckduckgo.com/html/?q={quote_plus(name + ' ' + address + ' menu')}")
+        website_url = None
+        blocked = ("duckduckgo.com", "google.com", "facebook.com", "instagram.com", "tripadvisor.com", "doordash.com", "ubereats.com", "grubhub.com", "youtube.com", "twitter.com", "tiktok.com")
+        for anchor in page.css("a[href*='http']"):
+            href = anchor.attrib.get("href", "")
+            if href.startswith("http") and not any(domain in href for domain in blocked):
+                website_url = href
+                break
+        if not website_url:
+            return []
+        site_page = smart_get(website_url)
+        items = menu_items_from_text_blob(site_page.body.text if site_page.body else "")
+        return [{"category": "Menu", "items": items[:30]}] if items else []
+    except Exception as e:
+        print(f"Website menu error: {e}")
+        return []
+
+
+def normalize_embedded_text(text):
+    normalized = text or ""
+    for old, new in {"\\u0026": "&", "\\u003c": "<", "\\u003e": ">", "\\/": "/", '\\"': '"', "\\'": "'"}.items():
+        normalized = normalized.replace(old, new)
+    return normalized
+
+
+def extract_first_json_value(page, keys):
+    key_pattern = "|".join(re.escape(key) for key in keys)
+    for script in page.css("script"):
+        match = re.search(rf'"(?:{key_pattern})"\s*:\s*"([^"]+)"', normalize_embedded_text(script.text or ""))
+        if match:
+            return match.group(1)
+    return None
+
+
+def is_likely_photo_url(url):
+    lower = str(url or "").lower()
+    return lower.startswith("http") and any(token in lower for token in (".jpg", ".jpeg", ".png", ".webp", "image", "photo"))
+
+
+def is_likely_restaurant_name(name):
+    clean = " ".join(str(name or "").split())
+    lower = clean.lower()
+    blocked = ["doordash", "delivery", "pickup", "login", "sign up", "cart", "search", "sponsored"]
+    return 2 <= len(clean) <= 80 and not any(token in lower for token in blocked)
+
+
+def is_likely_menu_item_name(name):
+    clean = " ".join(str(name or "").split())
+    if len(clean) < 2 or len(clean) > 80:
+        return False
+    lower = clean.lower()
+    blocked = ["reviews", "review", "restaurants", "restaurant", "directions", "phone", "website", "menu", "home", "photos", "see all", "write a review", "start order", "claim this business", "hours", "location", "sign up", "log in"]
+    if any(blocked_text == lower or blocked_text in lower for blocked_text in blocked):
+        return False
+    return not lower.startswith(("http", "www.")) and "@" not in lower and bool(re.search(r"[A-Za-z]", clean))
+
+
+def dedupe_strings(values):
+    seen = set()
+    unique = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        unique.append(value)
+    return unique
+
+
+def dedupe_restaurants(restaurants):
+    seen = set()
+    unique = []
+    for restaurant in restaurants:
+        name = " ".join(str(restaurant.get("name", "")).split())
+        if not is_likely_restaurant_name(name):
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        restaurant["name"] = name
+        unique.append(restaurant)
+    return unique
+
+
+def dedupe_menu_items(items):
     seen = set()
     unique = []
     for item in items:
-        if item["name"] not in seen:
-            seen.add(item["name"])
-            unique.append(item)
-
-    if unique:
-        return [{"category": "Popular Items", "items": unique[:20]}]
-    return []
-
-
-def extract_price(text):
-    if not text:
-        return ""
-    match = re.search(r'\$[\d,.]+', text)
-    return match.group() if match else ""
+        name = " ".join(str(item.get("name", "")).split())
+        if not is_likely_menu_item_name(name):
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        item["name"] = name
+        unique.append(item)
+    return unique
 
 
-def split_name_price(text):
-    match = re.search(r'\$[\d,.]+', text)
-    if match:
-        price = match.group()
-        name = text[:match.start()].strip().rstrip("-").rstrip(".").rstrip("…")
-        return name or text, price
-    return text, ""
-
-
-def format_time(military):
-    if len(military) != 4:
-        return military
+def float_or_none(value):
     try:
-        hour, minute = int(military[:2]), int(military[2:])
-        period = "PM" if hour >= 12 else "AM"
-        display = 12 if hour == 0 else (hour - 12 if hour > 12 else hour)
-        return f"{display}:{minute:02d} {period}"
-    except ValueError:
-        return military
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
 
 
-def merge_results(zabihah, yelp):
+def names_match(left, right):
+    left = " ".join(str(left or "").lower().split())
+    right = " ".join(str(right or "").lower().split())
+    if len(left) < 4 or len(right) < 4:
+        return False
+    return left[:8] in right or right[:8] in left
+
+
+def merge_results(zabihah, doordash):
     merged = list(zabihah)
-    for yr in yelp:
-        y_name = yr.get("name", "").lower()[:8]
-        y_lat = float(yr.get("latitude", 0))
-        y_lng = float(yr.get("longitude", 0))
-        is_dup = False
-
+    for dr in doordash:
+        d_lat = float_or_none(dr.get("latitude"))
+        d_lng = float_or_none(dr.get("longitude"))
+        duplicate = False
         for zr in merged:
-            z_name = zr.get("name", "").lower()[:8]
-            z_lat = float(zr.get("latitude", 0))
-            z_lng = float(zr.get("longitude", 0))
-
-            if (y_name in z_name or z_name in y_name) and \
-               ((y_lat - z_lat)**2 + (y_lng - z_lng)**2)**0.5 < 0.002:
-                if not zr.get("rating") and yr.get("rating"):
-                    zr["rating"] = yr["rating"]
-                if not zr.get("reviewCount") and yr.get("reviewCount"):
-                    zr["reviewCount"] = yr["reviewCount"]
-                if not zr.get("coverImage") and yr.get("coverImage"):
-                    zr["coverImage"] = yr["coverImage"]
-                if not zr.get("galleryPhotos") and yr.get("galleryPhotos"):
-                    zr["galleryPhotos"] = yr["galleryPhotos"]
-                if not zr.get("businessHours") and yr.get("businessHours"):
-                    zr["businessHours"] = yr["businessHours"]
-                is_dup = True
+            z_lat = float_or_none(zr.get("latitude"))
+            z_lng = float_or_none(zr.get("longitude"))
+            distance_match = z_lat is not None and z_lng is not None and d_lat is not None and d_lng is not None and ((d_lat - z_lat) ** 2 + (d_lng - z_lng) ** 2) ** 0.5 < 0.002
+            if names_match(zr.get("name"), dr.get("name")) and (distance_match or z_lat is None or d_lat is None):
+                for key in ("rating", "reviewCount", "coverImage", "galleryPhotos", "businessHours", "doordashUrl"):
+                    if not zr.get(key) and dr.get(key):
+                        zr[key] = dr[key]
+                duplicate = True
                 break
-
-        if not is_dup:
-            merged.append(yr)
-
-    return merged
+        if not duplicate:
+            merged.append(dr)
+    return merged[:MAX_RESTAURANT_RESULTS]
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host=os.environ.get("HOST", "0.0.0.0"), port=int(os.environ.get("PORT", "5000")), debug=False, threaded=True)
