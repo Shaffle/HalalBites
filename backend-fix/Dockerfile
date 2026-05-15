@@ -8,10 +8,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY server.py .
 
-RUN pip install --no-cache-dir flask gunicorn "scrapling[all]"
-RUN python -c "import camoufox; camoufox.install()" || echo "camoufox browser install skipped"
-
 EXPOSE 10000
-CMD ["gunicorn", "server:app", "--bind", "0.0.0.0:10000", "--timeout", "120", "--workers", "1"]
+CMD exec gunicorn server:app \
+    --bind 0.0.0.0:${PORT:-10000} \
+    --workers ${WEB_CONCURRENCY:-1} \
+    --threads ${GUNICORN_THREADS:-4} \
+    --timeout ${GUNICORN_TIMEOUT:-60} \
+    --graceful-timeout ${GUNICORN_GRACEFUL_TIMEOUT:-30} \
+    --access-logfile - \
+    --error-logfile -
